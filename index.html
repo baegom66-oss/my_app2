@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>용돈 관리 — Pocket Money Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            toss: { blue: '#3182F6', sky: '#E8F3FF', mint: '#00C853', warn: '#FF6B6B' },
+            surface: '#F7F8FA',
+          },
+          fontFamily: {
+            sans: ['Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" rel="stylesheet" />
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    body { background: #F2F4F6; }
+    .tab-active { color: #3182F6; border-bottom-color: #3182F6; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+    const STORAGE_KEY = 'pocket-money-manager-v1';
+
+    const EXPENSE_CATS = ['식비', '교통', '문화/여가', '쇼핑', '교육', '기타'];
+    const INCOME_CATS = ['용돈', '알바', '보너스', '기타'];
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return { transactions: [], monthlyBudget: 300000 };
+        const p = JSON.parse(raw);
+        return {
+          transactions: Array.isArray(p.transactions) ? p.transactions : [],
+          monthlyBudget: typeof p.monthlyBudget === 'number' ? p.monthlyBudget : 300000,
+        };
+      } catch {
+        return { transactions: [], monthlyBudget: 300000 };
+      }
+    }
+
+    function saveState(transactions, monthlyBudget) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ transactions, monthlyBudget }));
+    }
+
+    function formatKRW(n) {
+      return new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW', maximumFractionDigits: 0 }).format(n);
+    }
+
+    function sameMonth(d, ref) {
+      return d.getFullYear() === ref.getFullYear() && d.getMonth() === ref.getMonth();
+    }
+
+    function startOfWeekMonday(d) {
+      const x = new Date(d);
+      const day = x.getDay();
+      const diff = day === 0 ? -6 : 1 - day;
+      x.setDate(x.getDate() + diff);
+      x.setHours(0, 0, 0, 0);
+      return x;
+    }
+
+    function id() {
+      return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    }
+
+    function BudgetFeedback({ budget, spent }) {
+      if (budget <= 0) {
+        return (
+          <div className="rounded-2xl bg-amber-50 border border-amber-100 px-4 py-3 text-amber-900 text-sm">
+            이번 달 예산을 설정하면 소진율에 맞춰 응원 메시지를 드릴게요.
+          </div>
+        );
+      }
+      const ratio = spent / budget;
+      let tone = 'good';
+      let title = '잘 관리하고 있어요!';
+      let msg = '예산 안에서 균형 있게 쓰고 있어요. 오늘도 스마트한 소비!';
+      if (ratio >= 1) {
+        tone = 'bad';
+        title = '예산을 넘겼어요';
+        msg = '이번 달 지출이 예산을 초과했어요. 남은 기간은 필수 지출 위주로 조정해 보세요.';
+      } else if (ratio >= 0.9) {
+        tone = 'warn';
+        title = '주의가 필요해요';
+        msg = '예산의 90%에 가까워요. 큰 지출 전에 한 번 더 생각해 보는 건 어떨까요?';
+      } else if (ratio >= 0.7) {
+        tone = 'mid';
+        title = '조금 여유가 줄었어요';
+        msg = '절반 이상 사용했어요. 카테고리별로 남은 한도를 확인해 보세요.';
+      }
+      const pct = Math.min(100, Math.round(ratio * 100));
+      const barColor =
+        tone === 'bad' ? 'bg-toss-warn' : tone === 'warn' ? 'bg-amber-400' : tone === 'mid' ? 'bg-toss-blue' : 'bg-emerald-400';
+      return (
+        <div
+          className={`rounded-2xl px-4 py-3 text-sm border ${
+            tone === 'bad'
+              ? 'bg-red-50 border-red-100 text-red-900'
+              : tone === 'warn'
+              ? 'bg-orange-50 border-orange-100 text-orange-900'
+              : tone === 'mid'
+              ? 'bg-toss-sky border-blue-100 text-slate-800'
+              : 'bg-emerald-50 border-emerald-100 text-emerald-900'
+          }`}
+        >
+          <div className="flex justify-between items-baseline mb-2">
+            <span className="font-semibold">{title}</span>
+            <span className="text-xs opacity-80">{pct}% 사용</span>
+          </div>
+          <div className="h-2 rounded-full bg-white/60 overflow-hidden mb-2">
+            <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+          </div>
+          <p className="opacity-90 leading-relaxed">{msg}</p>
+        </div>
+      );
+    }
+
+    function TransactionForm({ onAdd }) {
+      const [type, setType] = useState('expense');
+      const [amount, setAmount] = useState('');
+      const [category, setCategory] = useState(EXPENSE_CATS[0]);
+      const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+      const [memo, setMemo] = useState('');
+
+      useEffect(() => {
+        setCategory(type === 'expense' ? EXPENSE_CATS[0] : INCOME_CATS[0]);
+      }, [type]);
+
+      const submit = (e) => {
+        e.preventDefault();
+        const n = Number(String(amount).replace(/,/g, ''));
+        if (!n || n <= 0) return;
+        onAdd({
+          id: id(),
+          type,
+          amount: n,
+          category,
+          date,
+          memo: memo.trim(),
+        });
+        setAmount('');
+        setMemo('');
+      };
+
+      const cats = type === 'expense' ? EXPENSE_CATS : INCOME_CATS;
+
+      return (
+        <form onSubmit={submit} className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 space-y-3">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setType('expense')}
+              className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition ${
+                type === 'expense' ? 'bg-toss-blue text-white' : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              지출
+            </button>
+            <button
+              type="button"
+              onClick={() => setType('income')}
+              className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition ${
+                type === 'income' ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              수입
+            </button>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">금액</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              placeholder="0"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ''))}
+              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-lg font-semibold outline-none focus:ring-2 focus:ring-toss-blue/30"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">카테고리</label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-toss-blue/30 bg-white"
+              >
+                {cats.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">날짜</label>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-toss-blue/30"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">메모</label>
+            <input
+              type="text"
+              placeholder="상세 내용 (선택)"
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-toss-blue/30"
+            />
+          </div>
+          <button
+            type="submit"
+            className="w-full py-3 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition"
+          >
+            기록 추가
+          </button>
+        </form>
+      );
+    }
+
+    function CalendarView({ transactions, cursorMonth, setCursorMonth, onDelete }) {
+      const year = cursorMonth.getFullYear();
+      const month = cursorMonth.getMonth();
+      const first = new Date(year, month, 1);
+      const last = new Date(year, month + 1, 0);
+      const startPad = first.getDay() === 0 ? 6 : first.getDay() - 1;
+      const daysInMonth = last.getDate();
+
+      const byDay = useMemo(() => {
+        const m = {};
+        transactions.forEach((t) => {
+          const d = new Date(t.date + 'T12:00:00');
+          if (!sameMonth(d, cursorMonth)) return;
+          const key = t.date;
+          if (!m[key]) m[key] = { income: 0, expense: 0 };
+          if (t.type === 'income') m[key].income += t.amount;
+          else m[key].expense += t.amount;
+        });
+        return m;
+      }, [transactions, cursorMonth]);
+
+      const cells = [];
+      for (let i = 0; i < startPad; i++) cells.push({ key: `p-${i}`, empty: true });
+      for (let d = 1; d <= daysInMonth; d++) {
+        const ds = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        cells.push({ key: ds, day: d, dateStr: ds, income: 0, expense: 0, ...byDay[ds] });
+      }
+
+      const weekDays = ['월', '화', '수', '목', '금', '토', '일'];
+
+      const listForDay = (dateStr) =>
+        transactions.filter((t) => t.date === dateStr).sort((a, b) => b.id.localeCompare(a.id));
+
+      return (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between bg-white rounded-2xl border border-slate-100 px-3 py-2">
+            <button
+              type="button"
+              className="p-2 rounded-lg hover:bg-slate-50 text-slate-600"
+              onClick={() => setCursorMonth(new Date(year, month - 1, 1))}
+              aria-label="이전 달"
+            >
+              ‹
+            </button>
+            <span className="font-semibold text-slate-800">
+              {year}년 {month + 1}월
+            </span>
+            <button
+              type="button"
+              className="p-2 rounded-lg hover:bg-slate-50 text-slate-600"
+              onClick={() => setCursorMonth(new Date(year, month + 1, 1))}
+              aria-label="다음 달"
+            >
+              ›
+            </button>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-100 p-3 overflow-x-auto">
+            <div className="grid grid-cols-7 gap-1 min-w-[280px]">
+              {weekDays.map((w) => (
+                <div key={w} className="text-center text-xs text-slate-400 py-1 font-medium">
+                  {w}
+                </div>
+              ))}
+              {cells.map((c) =>
+                c.empty ? (
+                  <div key={c.key} className="aspect-square rounded-lg bg-slate-50/50" />
+                ) : (
+                  <div
+                    key={c.key}
+                    className="aspect-square rounded-xl border border-slate-100 p-1 flex flex-col items-stretch justify-between bg-slate-50/30 hover:bg-toss-sky/40 transition min-h-[72px]"
+                  >
+                    <span className="text-xs font-semibold text-slate-700 pl-0.5">{c.day}</span>
+                    {c.expense > 0 && (
+                      <span className="text-[10px] leading-tight text-toss-warn font-medium truncate text-center">
+                        -{formatKRW(c.expense).replace(/\s/g, '')}
+                      </span>
+                    )}
+                    {c.income > 0 && (
+                      <span className="text-[10px] leading-tight text-emerald-600 font-medium truncate text-center">
+                        +{formatKRW(c.income).replace(/\s/g, '')}
+                      </span>
+                    )}
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-100 p-4">
+            <h3 className="text-sm font-semibold text-slate-800 mb-3">이번 달 일별 상세</h3>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {[...cells].reverse().filter((c) => !c.empty && (c.expense || c.income)).length === 0 ? (
+                <p className="text-sm text-slate-400">이 달 기록이 없습니다.</p>
+              ) : (
+                [...cells]
+                  .filter((c) => !c.empty && (c.expense || c.income))
+                  .sort((a, b) => b.dateStr.localeCompare(a.dateStr))
+                  .map((c) => (
+                    <div key={c.dateStr} className="border-b border-slate-50 pb-2 last:border-0">
+                      <div className="text-xs text-slate-500 mb-1">{c.dateStr}</div>
+                      {listForDay(c.dateStr).map((t) => (
+                        <div
+                          key={t.id}
+                          className="flex justify-between items-center text-sm py-1 gap-2"
+                        >
+                          <span className="text-slate-700 truncate">
+                            <span className={t.type === 'expense' ? 'text-toss-warn' : 'text-emerald-600'}>
+                              {t.type === 'expense' ? '지출' : '수입'}
+                            </span>{' '}
+                            {t.category}
+                            {t.memo ? ` · ${t.memo}` : ''}
+                          </span>
+                          <span className="shrink-0 font-medium">
+                            {t.type === 'expense' ? '-' : '+'}
+                            {formatKRW(t.amount)}
+                          </span>
+                          <button
+                            type="button"
+                            className="text-xs text-slate-400 hover:text-red-500 shrink-0"
+                            onClick={() => onDelete(t.id)}
+                          >
+                            삭제
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ))
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function ChartTab({ transactions, cursorMonth, setCursorMonth }) {
+      const pieRef = useRef(null);
+      const lineRef = useRef(null);
+      const pieChart = useRef(null);
+      const lineChart = useRef(null);
+
+      const pieData = useMemo(() => {
+        const catSum = {};
+        EXPENSE_CATS.forEach((c) => {
+          catSum[c] = 0;
+        });
+        transactions.forEach((t) => {
+          if (t.type !== 'expense') return;
+          const d = new Date(t.date + 'T12:00:00');
+          if (!sameMonth(d, cursorMonth)) return;
+          catSum[t.category] = (catSum[t.category] || 0) + t.amount;
+        });
+        const labels = Object.keys(catSum).filter((k) => catSum[k] > 0);
+        const data = labels.map((k) => catSum[k]);
+        return { labels, data, total: data.reduce((a, b) => a + b, 0) };
+      }, [transactions, cursorMonth]);
+
+      const weekSeries = useMemo(() => {
+        const now = new Date();
+        const start = startOfWeekMonday(now);
+        const days = [];
+        for (let i = 0; i < 7; i++) {
+          const dt = new Date(start);
+          dt.setDate(start.getDate() + i);
+          const ds = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+          days.push({ label: `${dt.getMonth() + 1}/${dt.getDate()}`, dateStr: ds, expense: 0 });
+        }
+        transactions.forEach((t) => {
+          if (t.type !== 'expense') return;
+          const hit = days.find((x) => x.dateStr === t.date);
+          if (hit) hit.expense += t.amount;
+        });
+        let cum = 0;
+        const cumulative = days.map((d) => {
+          cum += d.expense;
+          return cum;
+        });
+        return { labels: days.map((d) => d.label), daily: days.map((d) => d.expense), cumulative };
+      }, [transactions]);
+
+      useEffect(() => {
+        if (!pieRef.current) return;
+        if (pieChart.current) pieChart.current.destroy();
+        const ctx = pieRef.current.getContext('2d');
+        const colors = ['#3182F6', '#00C853', '#FFB020', '#FF6B6B', '#9C88FF', '#6B7280'];
+        pieChart.current = new Chart(ctx, {
+          type: 'doughnut',
+          data: {
+            labels: pieData.labels.length ? pieData.labels : ['데이터 없음'],
+            datasets: [
+              {
+                data: pieData.labels.length ? pieData.data : [1],
+                backgroundColor: pieData.labels.length ? colors : ['#E5E7EB'],
+                borderWidth: 0,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } },
+              tooltip: {
+                callbacks: {
+                  label(ctx) {
+                    const v = ctx.raw || 0;
+                    return `${ctx.label}: ${formatKRW(v)}`;
+                  },
+                },
+              },
+            },
+            cutout: '58%',
+          },
+        });
+        return () => {
+          if (pieChart.current) pieChart.current.destroy();
+        };
+      }, [pieData.labels.join(','), pieData.data.join(',')]);
+
+      useEffect(() => {
+        if (!lineRef.current) return;
+        if (lineChart.current) lineChart.current.destroy();
+        const ctx = lineRef.current.getContext('2d');
+        lineChart.current = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: weekSeries.labels,
+            datasets: [
+              {
+                label: '누적 지출',
+                data: weekSeries.cumulative,
+                borderColor: '#3182F6',
+                backgroundColor: 'rgba(49,130,246,0.12)',
+                fill: true,
+                tension: 0.35,
+                pointRadius: 4,
+                pointBackgroundColor: '#3182F6',
+              },
+              {
+                label: '일 지출',
+                data: weekSeries.daily,
+                borderColor: '#FF6B6B',
+                backgroundColor: 'transparent',
+                tension: 0.25,
+                borderDash: [4, 4],
+                pointRadius: 2,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+              y: { beginAtZero: true, grid: { color: '#F1F5F9' }, ticks: { font: { size: 10 } } },
+              x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+            },
+            plugins: {
+              legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } },
+              tooltip: {
+                callbacks: {
+                  label(ctx) {
+                    return `${ctx.dataset.label}: ${formatKRW(ctx.raw)}`;
+                  },
+                },
+              },
+            },
+          },
+        });
+        return () => {
+          if (lineChart.current) lineChart.current.destroy();
+        };
+      }, [weekSeries.labels.join(','), weekSeries.cumulative.join(','), weekSeries.daily.join(',')]);
+
+      const y = cursorMonth.getFullYear();
+      const m = cursorMonth.getMonth();
+      return (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between bg-white rounded-2xl border border-slate-100 px-3 py-2">
+            <button
+              type="button"
+              className="p-2 rounded-lg hover:bg-slate-50 text-slate-600"
+              onClick={() => setCursorMonth(new Date(y, m - 1, 1))}
+              aria-label="이전 달"
+            >
+              ‹
+            </button>
+            <span className="font-semibold text-slate-800 text-sm">
+              {y}년 {m + 1}월 · 지출 분석
+            </span>
+            <button
+              type="button"
+              className="p-2 rounded-lg hover:bg-slate-50 text-slate-600"
+              onClick={() => setCursorMonth(new Date(y, m + 1, 1))}
+              aria-label="다음 달"
+            >
+              ›
+            </button>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-100 p-4">
+            <h3 className="text-sm font-semibold text-slate-800 mb-1">이번 달 지출 비율</h3>
+            <p className="text-xs text-slate-500 mb-3">
+              총 지출 {formatKRW(pieData.total)}
+              {pieData.labels.length === 0 ? ' · 아직 지출 기록이 없어요.' : ''}
+            </p>
+            <div className="h-64 relative">
+              <canvas ref={pieRef} />
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-100 p-4">
+            <h3 className="text-sm font-semibold text-slate-800 mb-1">이번 주 지출 흐름</h3>
+            <p className="text-xs text-slate-500 mb-3">
+              월요일 시작 기준 · 실선은 누적 지출, 점선은 일별 지출입니다. 급격한 상승이면 &quot;위기&quot; 신호로 확인해 보세요.
+            </p>
+            <div className="h-56 relative">
+              <canvas ref={lineRef} />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function App() {
+      const init = loadState();
+      const [transactions, setTransactions] = useState(init.transactions);
+      const [monthlyBudget, setMonthlyBudget] = useState(init.monthlyBudget);
+      const [tab, setTab] = useState('calendar');
+      const [cursorMonth, setCursorMonth] = useState(() => new Date());
+
+      useEffect(() => {
+        saveState(transactions, monthlyBudget);
+      }, [transactions, monthlyBudget]);
+
+      const now = new Date();
+      const monthExpense = useMemo(() => {
+        return transactions.reduce((sum, t) => {
+          if (t.type !== 'expense') return sum;
+          const d = new Date(t.date + 'T12:00:00');
+          if (!sameMonth(d, now)) return sum;
+          return sum + t.amount;
+        }, 0);
+      }, [transactions, now.getMonth(), now.getFullYear()]);
+
+      const monthIncome = useMemo(() => {
+        return transactions.reduce((sum, t) => {
+          if (t.type !== 'income') return sum;
+          const d = new Date(t.date + 'T12:00:00');
+          if (!sameMonth(d, now)) return sum;
+          return sum + t.amount;
+        }, 0);
+      }, [transactions, now.getMonth(), now.getFullYear()]);
+
+      const addTx = useCallback((t) => {
+        setTransactions((prev) => [t, ...prev]);
+      }, []);
+
+      const deleteTx = useCallback((tid) => {
+        setTransactions((prev) => prev.filter((x) => x.id !== tid));
+      }, []);
+
+      return (
+        <div className="min-h-screen pb-10 max-w-lg mx-auto px-4 pt-6">
+          <header className="mb-5">
+            <p className="text-xs text-toss-blue font-medium mb-1">Pocket Money</p>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">용돈 관리</h1>
+            <p className="text-sm text-slate-500 mt-1">한 달 예산과 기록을 한곳에서 관리해요.</p>
+          </header>
+
+          <div className="bg-white rounded-2xl border border-slate-100 p-4 mb-4 shadow-sm">
+            <div className="flex justify-between items-start gap-3 mb-3">
+              <div>
+                <p className="text-xs text-slate-500">이번 달 순자산 변화</p>
+                <p className="text-lg font-bold text-slate-900">{formatKRW(monthIncome - monthExpense)}</p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  수입 {formatKRW(monthIncome)} · 지출 {formatKRW(monthExpense)}
+                </p>
+              </div>
+            </div>
+            <label className="text-xs text-slate-500 block mb-1">한 달 예산 (원)</label>
+            <input
+              type="number"
+              min="0"
+              step="10000"
+              value={monthlyBudget || ''}
+              onChange={(e) => setMonthlyBudget(Number(e.target.value) || 0)}
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-toss-blue/30"
+            />
+            <div className="mt-3">
+              <BudgetFeedback budget={monthlyBudget} spent={monthExpense} />
+            </div>
+          </div>
+
+          <TransactionForm onAdd={addTx} />
+
+          <div className="mt-6 flex border-b border-slate-200 bg-white/80 rounded-t-2xl px-2 pt-2">
+            <button
+              type="button"
+              className={`flex-1 py-3 text-sm font-semibold border-b-2 transition ${
+                tab === 'calendar' ? 'tab-active border-toss-blue text-toss-blue' : 'border-transparent text-slate-500'
+              }`}
+              onClick={() => setTab('calendar')}
+            >
+              캘린더
+            </button>
+            <button
+              type="button"
+              className={`flex-1 py-3 text-sm font-semibold border-b-2 transition ${
+                tab === 'chart' ? 'tab-active border-toss-blue text-toss-blue' : 'border-transparent text-slate-500'
+              }`}
+              onClick={() => setTab('chart')}
+            >
+              차트
+            </button>
+          </div>
+
+          <div className="bg-white/50 rounded-b-2xl border border-t-0 border-slate-100 p-4 -mt-px">
+            {tab === 'calendar' && (
+              <CalendarView
+                transactions={transactions}
+                cursorMonth={cursorMonth}
+                setCursorMonth={setCursorMonth}
+                onDelete={deleteTx}
+              />
+            )}
+            {tab === 'chart' && (
+              <ChartTab
+                transactions={transactions}
+                cursorMonth={cursorMonth}
+                setCursorMonth={setCursorMonth}
+              />
+            )}
+          </div>
+
+          <p className="text-center text-[11px] text-slate-400 mt-6">데이터는 브라우저에만 저장됩니다.</p>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
