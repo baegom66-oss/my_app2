@@ -82,6 +82,43 @@
 
     .cozy-title{ font-family: Gaegu, Pretendard, sans-serif; letter-spacing: 0.2px; font-weight: 700; }
     .cozy-note{ font-family: Pretendard, Apple SD Gothic Neo, Malgun Gothic, sans-serif; font-weight: 600; }
+    .speech-bubble{
+      position: relative;
+      background: rgba(255, 255, 255, 0.97);
+      border: 1px solid #e5e7eb;
+      border-radius: 1rem;
+      font-family: Pretendard, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+      font-weight: 500;
+      line-height: 1.55;
+    }
+    body.dark .speech-bubble{
+      background: rgba(17, 24, 39, 0.95);
+      border-color: #475569;
+    }
+    .speech-bubble::after{
+      content: "";
+      position: absolute;
+      right: -9px;
+      bottom: 28px;
+      width: 0;
+      height: 0;
+      border-top: 8px solid transparent;
+      border-bottom: 8px solid transparent;
+      border-left: 10px solid #e5e7eb;
+    }
+    body.dark .speech-bubble::after{ border-left-color: #475569; }
+    .speech-bubble::before{
+      content: "";
+      position: absolute;
+      right: -7px;
+      bottom: 29px;
+      width: 0;
+      height: 0;
+      border-top: 7px solid transparent;
+      border-bottom: 7px solid transparent;
+      border-left: 9px solid rgba(255, 255, 255, 0.97);
+    }
+    body.dark .speech-bubble::before{ border-left-color: rgba(17, 24, 39, 0.95); }
     .mobile-shell { max-width: 480px; margin: 0 auto; }
     .tab-bar-shadow { box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.08); }
     .safe-bottom { padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px)); }
@@ -127,14 +164,12 @@
       { id: "inc-etc", name: "기타", type: "income", color: "#A8B3C7" }
     ];
 
-    const STATUS_MESSAGES = {
-      paceFaster: "이번 달 전체 소비 속도가 지난달보다 빠릅니다. 지출 흐름을 한번 점검해 보세요.",
-      paceSlower: "이번 달 전체 소비 속도가 지난달보다 느립니다. 예산을 잘 지키고 있어요.",
-      paceSimilar: "이번 달 전체 소비 속도는 지난달과 비슷한 수준입니다.",
-      budgetOver: (name) => `선택한 '${name}' 카테고리 예산이 초과되었습니다. 추가 지출에 주의하세요.`,
-      budgetOk: (name) => `선택한 '${name}' 카테고리는 현재 예산 범위 안입니다.`,
-      noLastMonth: "지난달 데이터가 없어 소비 속도 비교를 할 수 없습니다."
-    };
+    function getFishSpeechMessage(ratio) {
+      if (ratio > 1) return "펑-! 내가 폭탄 된다고 했잖아. 이번 달 남은 날은 손가락만 빨고 살아야겠네.. 💣";
+      if (ratio > 0.8) return "나 지금 목 매달리기 직전이야. 네 통장도 나만큼 숨 가쁘게 헐떡이는 중인데... 제발 멈춰!";
+      if (ratio > 0.5) return "어라, 줄이 왜 올라가지...?  방금 긁은 거 진짜 꼭 필요했던 거 맞아?";
+      return "아직은 줄이 넉넉해서 나도 편해. 이대로만 살자, 인간다운 삶 가능! ✨";
+    }
 
     const pad = (n) => String(n).padStart(2, "0");
     const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -519,49 +554,45 @@
 
     function BudgetUrgencySticker({ ratio, dark }) {
       const stage = ratio > 1 ? "boom" : ratio > 0.8 ? "panic" : ratio > 0.5 ? "alert" : "calm";
-      const ropeHeight = stage === "calm" ? 64 : stage === "alert" ? 44 : stage === "panic" ? 26 : 18;
+      const ropeHeight = stage === "calm" ? 68 : stage === "alert" ? 46 : stage === "panic" ? 24 : 16;
       const face = stage === "calm"
-        ? { eyeR: 1.8, sweat: false, panicLines: false }
+        ? { eyeR: 2.1, sweat: false, panicLines: false }
         : stage === "alert"
-          ? { eyeR: 2.2, sweat: true, panicLines: false }
-          : { eyeR: 2.4, sweat: true, panicLines: true };
+          ? { eyeR: 2.3, sweat: true, panicLines: false }
+          : { eyeR: 2.5, sweat: true, panicLines: true };
 
       return (
-        <div className={`w-[168px] h-[130px] rounded-2xl border relative overflow-hidden ${dark ? "bg-slate-900/80 border-slate-700" : "bg-[#fffefb] border-gray-200"}`}>
-          <div className={`absolute top-1 left-1/2 -translate-x-1/2 text-[11px] px-2 py-0.5 rounded-full ${dark ? "bg-slate-800 text-slate-200" : "bg-slate-100 text-slate-700"}`}>
-            {stage === "calm" ? "평온" : stage === "alert" ? "주의" : stage === "panic" ? "위급" : "폭발"}
-          </div>
+        <div className={`w-[168px] h-[130px] shrink-0 rounded-2xl border relative overflow-hidden ${dark ? "bg-slate-900/80 border-slate-700" : "bg-[#fffefb] border-gray-200"}`}>
           <svg width="168" height="130" viewBox="0 0 168 130">
-            <line x1="84" y1="0" x2="84" y2={ropeHeight} stroke={dark ? "#94a3b8" : "#64748b"} strokeWidth="2.2" strokeLinecap="round" />
+            <line x1="84" y1="2" x2="84" y2={ropeHeight} stroke={dark ? "#94a3b8" : "#64748b"} strokeWidth="2" strokeLinecap="round" />
             {stage !== "boom" ? (
-              <g className={stage === "panic" ? "fish-shake" : ""} transform={`translate(50 ${ropeHeight})`}>
-                <path d="M22 30 C14 25, 10 17, 14 11 C20 8, 26 11, 30 16 C28 22, 26 26, 22 30 Z" fill={dark ? "#6b7280" : "#c0c6d0"} stroke={dark ? "#475569" : "#8e99ab"} strokeWidth="1.6" strokeLinejoin="round" />
-                <path d="M31 17 C36 9, 50 6, 61 10 C70 13, 75 20, 72 26 C67 33, 52 37, 40 34 C31 32, 28 24, 31 17 Z" fill="#A9D8F3" stroke={dark ? "#64748b" : "#7b879a"} strokeWidth="1.8" strokeLinejoin="round" />
-                <path d="M63 20 C69 17, 74 15, 80 14 C76 18, 76 24, 80 29 C74 28, 69 26, 63 23 Z" fill="#8FC8EB" stroke={dark ? "#64748b" : "#7b879a"} strokeWidth="1.7" strokeLinejoin="round" />
-                <path d="M35 22 C41 19, 49 18, 57 21" stroke={dark ? "#7a8798" : "#8d98a8"} strokeWidth="1.2" fill="none" strokeLinecap="round" />
-                <circle cx="41" cy="21" r={face.eyeR} fill="#1f2937" />
-                <circle cx="48" cy="21" r={face.eyeR} fill="#1f2937" />
-                {face.sweat && <path d="M54 13 C57 8, 60 12, 58 16 C56 18, 53 17, 54 13 Z" fill="#9fc7d9" stroke="#85afc2" strokeWidth="0.9" />}
+              <g className={stage === "panic" ? "fish-shake" : ""} transform={`translate(42 ${ropeHeight - 4})`}>
+                <path d="M8 34 C2 30, 0 22, 4 15 C9 10, 16 8, 22 12 C24 18, 22 26, 16 32 C12 36, 9 35, 8 34 Z" fill="#9CCFEA" stroke={dark ? "#64748b" : "#7b879a"} strokeWidth="1.6" strokeLinejoin="round" />
+                <path d="M24 14 C30 8, 44 5, 58 9 C66 12, 70 18, 68 25 C64 32, 50 36, 36 33 C28 30, 24 22, 24 14 Z" fill="#A9D8F3" stroke={dark ? "#64748b" : "#7b879a"} strokeWidth="1.7" strokeLinejoin="round" />
+                <path d="M62 18 C70 15, 78 14, 86 16 C80 21, 78 27, 84 31 C76 30, 68 27, 62 22 Z" fill="#8FC8EB" stroke={dark ? "#64748b" : "#7b879a"} strokeWidth="1.5" strokeLinejoin="round" />
+                <ellipse cx="36" cy="20" rx="2.8" ry="2.2" fill="#1f2937" />
+                {face.sweat && (
+                  <path d="M52 10 C55 5, 58 9, 56 14 C54 16, 51 14, 52 10 Z" fill="#9fc7d9" stroke="#85afc2" strokeWidth="0.8" />
+                )}
                 {face.panicLines && (
                   <>
-                    <line x1="37" y1="11" x2="37" y2="16" stroke="#5FA6D8" strokeWidth="1.6" strokeLinecap="round" />
-                    <line x1="43.5" y1="10" x2="43.5" y2="16" stroke="#5FA6D8" strokeWidth="1.6" strokeLinecap="round" />
-                    <line x1="50" y1="11" x2="50" y2="16" stroke="#5FA6D8" strokeWidth="1.6" strokeLinecap="round" />
+                    <line x1="28" y1="8" x2="28" y2="14" stroke="#5FA6D8" strokeWidth="1.5" strokeLinecap="round" />
+                    <line x1="34" y1="7" x2="34" y2="14" stroke="#5FA6D8" strokeWidth="1.5" strokeLinecap="round" />
+                    <line x1="40" y1="8" x2="40" y2="14" stroke="#5FA6D8" strokeWidth="1.5" strokeLinecap="round" />
                   </>
                 )}
-                <circle cx="45" cy="23" r="0.95" fill={dark ? "#e2e8f0" : "#ffffff"} opacity="0.7" />
               </g>
             ) : (
-              <g className="boom-pop" transform="translate(54 22)">
-                <path d="M29 16 C39 16, 46 24, 46 34 C46 43, 39 51, 29 51 C20 51, 12 43, 12 34 C12 24, 20 16, 29 16 Z" fill="#4b5563" stroke="#1f2937" strokeWidth="1.8" />
-                <path d="M29 16 C26 8, 34 7, 35 14" stroke="#d6a96d" strokeWidth="2.7" strokeLinecap="round" />
-                <circle cx="23" cy="31" r="2.7" fill="#f1f5f9" />
-                <circle cx="35" cy="36" r="2.7" fill="#f1f5f9" />
-                <path d="M23 43 Q29 46 35 43" stroke="#f1f5f9" strokeWidth="1.8" fill="none" />
-                <path d="M76 32 C81 26, 90 27, 95 33 C90 39, 81 40, 76 32 Z" fill="#d8aeb8" />
-                <path d="M68 23 C71 20, 75 21, 77 24" stroke={dark ? "#f0c9d1" : "#bf8795"} strokeWidth="1.6" fill="none" strokeLinecap="round" />
-                <path d="M95 23 C98 20, 102 21, 104 24" stroke={dark ? "#f0c9d1" : "#bf8795"} strokeWidth="1.6" fill="none" strokeLinecap="round" />
-                <text x="70" y="22" fontSize="16" fontWeight="700" fill={dark ? "#e7c6cf" : "#ba8795"}>펑!</text>
+              <g className="boom-pop" transform="translate(48 18)">
+                <ellipse cx="36" cy="52" rx="20" ry="14" fill={dark ? "#64748b" : "#cbd5e1"} opacity="0.55" />
+                <ellipse cx="52" cy="44" rx="12" ry="9" fill={dark ? "#64748b" : "#cbd5e1"} opacity="0.45" />
+                <ellipse cx="68" cy="50" rx="14" ry="10" fill={dark ? "#64748b" : "#cbd5e1"} opacity="0.4" />
+                <path d="M30 30 C40 28, 48 34, 48 44 C48 52, 40 58, 30 58 C20 58, 12 50, 12 40 C12 30, 20 30, 30 30 Z" fill="#4b5563" stroke="#1f2937" strokeWidth="1.7" />
+                <path d="M30 30 C27 22, 34 20, 36 27" stroke="#d6a96d" strokeWidth="2.4" strokeLinecap="round" />
+                <circle cx="24" cy="42" r="2.4" fill="#f1f5f9" />
+                <circle cx="36" cy="47" r="2.4" fill="#f1f5f9" />
+                <path d="M24 52 Q30 55 36 52" stroke="#f1f5f9" strokeWidth="1.6" fill="none" />
+                <text x="58" y="38" fontSize="15" fontWeight="800" fill={dark ? "#fca5a5" : "#e8799a"} fontFamily="Pretendard, sans-serif">BOOM</text>
               </g>
             )}
           </svg>
@@ -604,15 +635,13 @@
       );
     }
 
-    function StatusBanner({ messages, dark, urgencyRatio, urgencyLabel }) {
-      if (!messages.length) return null;
+    function StatusBanner({ message, dark, urgencyRatio }) {
+      if (!message) return null;
       return (
-        <div className={`rounded-2xl border p-4 mb-4 cozy-note ${dark ? "paper-card border-slate-700" : "paper-card border-gray-200"}`}>
-          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-            <div className="flex-1 space-y-1.5">
-              {messages.map((msg, i) => (
-                <p key={i} className={`text-sm ${dark ? "text-slate-200" : "text-slate-800"}`}>{msg}</p>
-              ))}
+        <div className={`rounded-2xl border p-3 sm:p-4 mb-4 ${dark ? "paper-card border-slate-700" : "paper-card border-gray-200"}`}>
+          <div className="flex flex-col-reverse sm:flex-row gap-3 sm:gap-4 items-center sm:items-end justify-between">
+            <div className={`speech-bubble flex-1 w-full px-4 py-3 text-sm sm:text-[15px] pr-5 ${dark ? "text-slate-200" : "text-slate-800"}`}>
+              {message}
             </div>
             <BudgetUrgencySticker ratio={urgencyRatio || 0} dark={dark} />
           </div>
@@ -1470,32 +1499,6 @@
         return `지출 ${categoriesByType.expense.length}개 · 수입 ${categoriesByType.income.length}개`;
       }, [categoriesByType.expense.length, categoriesByType.income.length]);
 
-      const statusMessages = useMemo(() => {
-        const msgs = [];
-        const pace = computeSpendingPace(cursorMonth, monthExpense, lastMonthExpense);
-        if (pace === "none") {
-          msgs.push(STATUS_MESSAGES.noLastMonth);
-        } else if (pace === "faster") {
-          msgs.push(STATUS_MESSAGES.paceFaster);
-        } else if (pace === "slower") {
-          msgs.push(STATUS_MESSAGES.paceSlower);
-        } else {
-          msgs.push(STATUS_MESSAGES.paceSimilar);
-        }
-
-        const selectedCat = categoryMap[selectedCategoryId];
-        if (selectedCat && selectedCat.type === "expense") {
-          const spent = currentStats.amountMap[selectedCategoryId] || 0;
-          const budget = monthData.budgets[selectedCategoryId] || 0;
-          if (budget > 0 && spent > budget) {
-            msgs.push(STATUS_MESSAGES.budgetOver(selectedCat.name));
-          } else if (budget > 0) {
-            msgs.push(STATUS_MESSAGES.budgetOk(selectedCat.name));
-          }
-        }
-        return msgs;
-      }, [cursorMonth, monthExpense, lastMonthExpense, selectedCategoryId, categoryMap, currentStats.amountMap, monthData.budgets]);
-
       const urgencyInfo = useMemo(() => {
         const expenseCats = categoriesByType.expense;
         const ratios = expenseCats
@@ -1506,8 +1509,7 @@
           })
           .filter((r) => Number.isFinite(r));
         const ratio = ratios.length ? Math.max(...ratios) : 0;
-        const label = ratio > 1 ? "예산 폭발" : ratio > 0.8 ? "긴급 경보" : ratio > 0.5 ? "주의 단계" : "안정 단계";
-        return { ratio, label };
+        return { ratio, message: getFishSpeechMessage(ratio) };
       }, [categoriesByType.expense, monthData.budgets, currentStats.amountMap]);
 
       const addEntry = (ev) => {
@@ -1821,7 +1823,7 @@
               </div>
             </header>
 
-            <StatusBanner messages={statusMessages} dark={dark} urgencyRatio={urgencyInfo.ratio} urgencyLabel={urgencyInfo.label} />
+            <StatusBanner message={urgencyInfo.message} dark={dark} urgencyRatio={urgencyInfo.ratio} />
 
             {isMobileView ? activeTabContent : (
               <DesktopDashboard
