@@ -605,64 +605,81 @@
       );
     }
 
-    function AnalysisPanel({ trendRows, entries, categoryMap, donutLabels, donutValues, donutColors, dark, cardClass }) {
+    function DetailList({ entries, categoryMap, dark, cardClass, maxHeight = "max-h-96" }) {
       const sortedEntries = entries.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
       const subtle = dark ? "text-slate-400" : "text-slate-500";
       return (
-        <div className="space-y-4">
-          <div className={`rounded-2xl border p-4 ${cardClass}`}>
-            <h2 className="font-semibold mb-3">카테고리별 지출 비율</h2>
-            <DonutChart labels={donutLabels} values={donutValues} colors={donutColors} dark={dark} />
-          </div>
-
-          <div className={`rounded-2xl border p-4 ${cardClass}`}>
-            <h2 className="font-semibold mb-3">지난달 대비 카테고리 추이</h2>
-            <div className="space-y-2">
-              {trendRows.map((row) => (
-                <div key={row.id} className={`rounded-xl border p-3 ${dark ? "border-slate-700 bg-slate-800/50" : "border-slate-100 bg-slate-50/80"}`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-sm font-semibold">
-                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: row.color }} />
-                      {row.name}
+        <div className={`rounded-2xl border p-4 ${cardClass}`}>
+          <h2 className="font-semibold mb-3">상세 내역 리스트</h2>
+          <div className={`space-y-2 ${maxHeight} overflow-y-auto`}>
+            {sortedEntries.length === 0 ? (
+              <p className={`text-sm ${subtle}`}>이번 달 기록이 없습니다.</p>
+            ) : sortedEntries.map((e) => {
+              const cat = categoryMap[e.categoryId];
+              return (
+                <div key={e.id} className={`rounded-xl border p-3 ${dark ? "border-slate-700 bg-slate-800/50" : "border-slate-100 bg-slate-50/80"}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat?.color || "#94A3B8" }} />
+                      <strong>{cat?.name || "알 수 없음"}</strong>
+                      <span className={`text-[11px] px-1.5 py-0.5 rounded ${e.type === "expense" ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}>
+                        {e.type === "expense" ? "지출" : "수입"}
+                      </span>
                     </div>
-                    <span className={`text-xs font-bold ${row.diff > 0 ? "text-red-500" : row.diff < 0 ? "text-emerald-600" : subtle}`}>
-                      {row.diff > 0 ? "▲" : row.diff < 0 ? "▼" : "—"} {formatKRW(Math.abs(row.diff))}
-                      {row.last > 0 ? ` (${row.pct > 0 ? "+" : ""}${row.pct}%)` : ""}
-                    </span>
+                    <strong className="text-sm">{e.type === "expense" ? "-" : "+"}{formatKRW(e.amount)}</strong>
                   </div>
-                  <p className={`text-xs mt-1 ${subtle}`}>
-                    지난달 {formatKRW(row.last)} (총 {row.lastCount}회) → 이번 달 {formatKRW(row.current)} (총 {row.currentCount}회)
-                  </p>
+                  <p className={`text-xs mt-1 ${subtle}`}>{e.date} · {e.memo || "메모 없음"}</p>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
+        </div>
+      );
+    }
 
-          <div className={`rounded-2xl border p-4 ${cardClass}`}>
-            <h2 className="font-semibold mb-3">상세 내역 리스트</h2>
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {sortedEntries.length === 0 ? (
-                <p className={`text-sm ${subtle}`}>이번 달 기록이 없습니다.</p>
-              ) : sortedEntries.map((e) => {
-                const cat = categoryMap[e.categoryId];
-                return (
-                  <div key={e.id} className={`rounded-xl border p-3 ${dark ? "border-slate-700 bg-slate-800/50" : "border-slate-100 bg-slate-50/80"}`}>
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 text-sm">
-                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat?.color || "#94A3B8" }} />
-                        <strong>{cat?.name || "알 수 없음"}</strong>
-                        <span className={`text-[11px] px-1.5 py-0.5 rounded ${e.type === "expense" ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}>
-                          {e.type === "expense" ? "지출" : "수입"}
-                        </span>
-                      </div>
-                      <strong className="text-sm">{e.type === "expense" ? "-" : "+"}{formatKRW(e.amount)}</strong>
-                    </div>
-                    <p className={`text-xs mt-1 ${subtle}`}>{e.date} · {e.memo || "메모 없음"}</p>
+    function DonutSection({ donutLabels, donutValues, donutColors, dark, cardClass }) {
+      return (
+        <div className={`rounded-2xl border p-4 ${cardClass}`}>
+          <h2 className="font-semibold mb-3">카테고리별 지출 비율</h2>
+          <DonutChart labels={donutLabels} values={donutValues} colors={donutColors} dark={dark} />
+        </div>
+      );
+    }
+
+    function TrendSection({ trendRows, dark, cardClass }) {
+      const subtle = dark ? "text-slate-400" : "text-slate-500";
+      return (
+        <div className={`rounded-2xl border p-4 ${cardClass}`}>
+          <h2 className="font-semibold mb-3">지난달 대비 카테고리 추이</h2>
+          <div className="space-y-2">
+            {trendRows.map((row) => (
+              <div key={row.id} className={`rounded-xl border p-3 ${dark ? "border-slate-700 bg-slate-800/50" : "border-slate-100 bg-slate-50/80"}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm font-semibold">
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: row.color }} />
+                    {row.name}
                   </div>
-                );
-              })}
-            </div>
+                  <span className={`text-xs font-bold ${row.diff > 0 ? "text-red-500" : row.diff < 0 ? "text-emerald-600" : subtle}`}>
+                    {row.diff > 0 ? "▲" : row.diff < 0 ? "▼" : "—"} {formatKRW(Math.abs(row.diff))}
+                    {row.last > 0 ? ` (${row.pct > 0 ? "+" : ""}${row.pct}%)` : ""}
+                  </span>
+                </div>
+                <p className={`text-xs mt-1 ${subtle}`}>
+                  지난달 {formatKRW(row.last)} (총 {row.lastCount}회) → 이번 달 {formatKRW(row.current)} (총 {row.currentCount}회)
+                </p>
+              </div>
+            ))}
           </div>
+        </div>
+      );
+    }
+
+    function AnalysisPanel({ trendRows, entries, categoryMap, donutLabels, donutValues, donutColors, dark, cardClass }) {
+      return (
+        <div className="space-y-4">
+          <DonutSection donutLabels={donutLabels} donutValues={donutValues} donutColors={donutColors} dark={dark} cardClass={cardClass} />
+          <TrendSection trendRows={trendRows} dark={dark} cardClass={cardClass} />
+          <DetailList entries={entries} categoryMap={categoryMap} dark={dark} cardClass={cardClass} />
         </div>
       );
     }
@@ -840,7 +857,6 @@
         }));
         setAmount("");
         setMemo("");
-        if (isMobileView) setActiveTab("home");
       };
 
       const addQuickAmount = (plus) => {
@@ -955,6 +971,42 @@
               wide={!isMobileView}
             />
           </div>
+
+          {isMobileView && (
+            <>
+              <EntryForm
+                entryType={entryType}
+                setEntryType={setEntryType}
+                amount={amount}
+                setAmount={setAmount}
+                addQuickAmount={addQuickAmount}
+                selectedCategoryId={selectedCategoryId}
+                setSelectedCategoryId={setSelectedCategoryId}
+                categoriesByType={categoriesByType}
+                entryDate={entryDate}
+                setEntryDate={setEntryDate}
+                memo={memo}
+                setMemo={setMemo}
+                onSubmit={addEntry}
+                dark={dark}
+                inputClass={input}
+                cardClass={card}
+              />
+              <DonutSection
+                donutLabels={donutLabels}
+                donutValues={donutValues}
+                donutColors={donutColors}
+                dark={dark}
+                cardClass={card}
+              />
+              <DetailList
+                entries={monthData.entries}
+                categoryMap={categoryMap}
+                dark={dark}
+                cardClass={card}
+              />
+            </>
+          )}
 
           <CategoryManager
             monthData={monthData}
