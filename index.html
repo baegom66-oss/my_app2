@@ -11,10 +11,19 @@
       theme: {
         extend: {
           colors: {
-            brand: { blue: "#2563EB", sky: "#DBEAFE" }
+            // Soft highlighter / pastel accents
+            brand: {
+              blue: "#6B8AF7",
+              mint: "#67DCC2",
+              peach: "#FFB38A",
+              rose: "#FF8FA3",
+              butter: "#FFE28A",
+              sky: "#EAF2FF"
+            }
           },
           fontFamily: {
-            sans: ["Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "sans-serif"]
+            sans: ["Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "sans-serif"],
+            hand: ["Gaegu", "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "sans-serif"]
           }
         }
       }
@@ -22,13 +31,63 @@
   </script>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
   <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Gaegu:wght@300;400;700&display=swap" rel="stylesheet" />
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
-    body { background: #f1f5f9; }
-    body.dark { background: #020617; }
+    :root{
+      --paper: #fffdf7;
+      --paper-ink: #0f172a;
+      --paper-line: rgba(15, 23, 42, 0.06);
+      --paper-line-strong: rgba(15, 23, 42, 0.09);
+      --paper-shadow: rgba(15, 23, 42, 0.06);
+    }
+    body { background: var(--paper); color: var(--paper-ink); }
+    body.dark {
+      --paper: #0b1220;
+      --paper-ink: #e2e8f0;
+      --paper-line: rgba(226, 232, 240, 0.07);
+      --paper-line-strong: rgba(226, 232, 240, 0.10);
+      --paper-shadow: rgba(0, 0, 0, 0.25);
+      background: var(--paper);
+      color: var(--paper-ink);
+    }
+
+    /* Light graph-paper texture */
+    .paper-bg{
+      background-image:
+        linear-gradient(to right, var(--paper-line) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--paper-line) 1px, transparent 1px),
+        linear-gradient(to right, var(--paper-line-strong) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--paper-line-strong) 1px, transparent 1px);
+      background-size: 18px 18px, 18px 18px, 90px 90px, 90px 90px;
+      background-position: 0 0, 0 0, 0 0, 0 0;
+    }
+
+    /* Card: feels like paper cells (thin border, no heavy shadows) */
+    .paper-card{
+      background-color: rgba(255, 255, 255, 0.72);
+      background-image:
+        linear-gradient(to right, rgba(15,23,42,0.035) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(15,23,42,0.035) 1px, transparent 1px);
+      background-size: 22px 22px;
+      box-shadow: 0 1px 0 var(--paper-shadow);
+    }
+    body.dark .paper-card{
+      background-color: rgba(15, 23, 42, 0.35);
+      background-image:
+        linear-gradient(to right, rgba(226,232,240,0.06) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(226,232,240,0.06) 1px, transparent 1px);
+      background-size: 22px 22px;
+      box-shadow: 0 1px 0 var(--paper-shadow);
+    }
+
+    .cozy-title{ font-family: Gaegu, Pretendard, sans-serif; letter-spacing: 0.2px; }
+    .cozy-note{ font-family: Gaegu, Pretendard, sans-serif; }
     .mobile-shell { max-width: 480px; margin: 0 auto; }
     .tab-bar-shadow { box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.08); }
     .safe-bottom { padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px)); }
@@ -43,20 +102,21 @@
     const APP_NAMESPACE = "allowance-manager-v4";
     const LEGACY_KEY = "pocket-money-manager-v1";
     const QUICK_AMOUNTS = [5000, 10000, 50000, 100000];
-    const COLOR_POOL = ["#EF4444", "#F97316", "#EAB308", "#22C55E", "#06B6D4", "#3B82F6", "#8B5CF6", "#EC4899", "#64748B"];
+    // Pastel / highlighter tones (soft but clear)
+    const COLOR_POOL = ["#FF8FA3", "#FFB38A", "#FFE28A", "#67DCC2", "#7FD3FF", "#6B8AF7", "#B6A7FF", "#FFA6D6", "#A8B3C7"];
 
     const DEFAULT_EXPENSE_CATEGORIES = [
-      { id: "exp-food", name: "식비", type: "expense", color: "#EF4444" },
-      { id: "exp-transport", name: "교통", type: "expense", color: "#3B82F6" },
-      { id: "exp-fun", name: "여가", type: "expense", color: "#EAB308" },
-      { id: "exp-shopping", name: "쇼핑", type: "expense", color: "#EC4899" },
-      { id: "exp-etc", name: "기타", type: "expense", color: "#64748B" }
+      { id: "exp-food", name: "식비", type: "expense", color: "#FF8FA3" },
+      { id: "exp-transport", name: "교통", type: "expense", color: "#6B8AF7" },
+      { id: "exp-fun", name: "여가", type: "expense", color: "#FFE28A" },
+      { id: "exp-shopping", name: "쇼핑", type: "expense", color: "#FFA6D6" },
+      { id: "exp-etc", name: "기타", type: "expense", color: "#A8B3C7" }
     ];
     const DEFAULT_INCOME_CATEGORIES = [
-      { id: "inc-allowance", name: "용돈", type: "income", color: "#22C55E" },
-      { id: "inc-parttime", name: "알바", type: "income", color: "#06B6D4" },
-      { id: "inc-bonus", name: "보너스", type: "income", color: "#8B5CF6" },
-      { id: "inc-etc", name: "기타", type: "income", color: "#64748B" }
+      { id: "inc-allowance", name: "용돈", type: "income", color: "#67DCC2" },
+      { id: "inc-parttime", name: "알바", type: "income", color: "#7FD3FF" },
+      { id: "inc-bonus", name: "보너스", type: "income", color: "#B6A7FF" },
+      { id: "inc-etc", name: "기타", type: "income", color: "#A8B3C7" }
     ];
 
     const STATUS_MESSAGES = {
@@ -436,7 +496,7 @@
     function StatusBanner({ messages, dark }) {
       if (!messages.length) return null;
       return (
-        <div className={`rounded-xl border p-3 mb-4 space-y-1 ${dark ? "bg-slate-800 border-slate-700" : "bg-brand-sky/60 border-blue-100"}`}>
+        <div className={`rounded-2xl border p-3 mb-4 space-y-1 cozy-note ${dark ? "paper-card border-slate-700" : "paper-card border-gray-200"}`}>
           {messages.map((msg, i) => (
             <p key={i} className={`text-sm ${dark ? "text-slate-200" : "text-slate-800"}`}>{msg}</p>
           ))}
@@ -1366,8 +1426,12 @@
       const goPrevMonth = () => setCursorMonth(shiftMonth(cursorMonth, -1));
       const goNextMonth = () => setCursorMonth(shiftMonth(cursorMonth, 1));
 
-      const card = dark ? "bg-slate-900 border-slate-800 text-slate-100" : "bg-white border-slate-100 text-slate-900";
-      const input = dark ? "bg-slate-800 border-slate-700 text-slate-100" : "bg-white border-slate-200 text-slate-900";
+      const card = dark
+        ? "paper-card border border-slate-700 text-slate-100"
+        : "paper-card border border-gray-200 text-slate-900";
+      const input = dark
+        ? "bg-slate-900/40 border-slate-700 text-slate-100"
+        : "bg-[#fffefb] border-gray-200 text-slate-900";
       const subtle = dark ? "text-slate-400" : "text-slate-500";
       const shellClass = isMobileView ? "mobile-shell" : "max-w-[1400px] mx-auto w-full";
       const contentPad = isMobileView ? "safe-bottom" : "pb-8";
@@ -1521,11 +1585,11 @@
         : null;
 
       return (
-        <div className={`${dark ? "bg-slate-950 text-slate-100" : "text-slate-900 bg-slate-100"} min-h-screen ${contentPad}`}>
+        <div className={`${dark ? "bg-slate-950 text-slate-100" : "text-slate-900"} paper-bg min-h-screen ${contentPad}`}>
           <div className={`${shellClass} px-4 sm:px-6 py-4 sm:py-6`}>
             <header className="mb-4 sm:mb-6">
               <div className="flex items-center justify-between gap-2 mb-3">
-                <h1 className="text-xl sm:text-3xl font-bold">용돈 관리 앱</h1>
+                <h1 className="text-xl sm:text-3xl font-bold cozy-title">용돈 관리 앱</h1>
                 <button onClick={() => setTheme(dark ? "light" : "dark")} className={`px-3 py-2 rounded-lg text-sm border ${card}`}>
                   {dark ? "라이트" : "다크"}
                 </button>
