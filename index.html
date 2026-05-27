@@ -46,7 +46,7 @@
       --paper-line-strong: rgba(15, 23, 42, 0.09);
       --paper-shadow: rgba(15, 23, 42, 0.06);
     }
-    body { background: var(--paper); color: var(--paper-ink); }
+    body { background: var(--paper); color: var(--paper-ink); font-weight: 500; }
     body.dark {
       --paper: #0b1220;
       --paper-ink: #e2e8f0;
@@ -70,7 +70,7 @@
 
     /* Card: feels like paper cells (thin border, no heavy shadows) */
     .paper-card{
-      background-color: rgba(255, 255, 255, 0.72);
+      background-color: rgba(255, 255, 255, 0.90);
       background-image:
         linear-gradient(to right, rgba(15,23,42,0.035) 1px, transparent 1px),
         linear-gradient(to bottom, rgba(15,23,42,0.035) 1px, transparent 1px);
@@ -78,7 +78,7 @@
       box-shadow: 0 1px 0 var(--paper-shadow);
     }
     body.dark .paper-card{
-      background-color: rgba(15, 23, 42, 0.35);
+      background-color: rgba(15, 23, 42, 0.62);
       background-image:
         linear-gradient(to right, rgba(226,232,240,0.06) 1px, transparent 1px),
         linear-gradient(to bottom, rgba(226,232,240,0.06) 1px, transparent 1px);
@@ -86,11 +86,25 @@
       box-shadow: 0 1px 0 var(--paper-shadow);
     }
 
-    .cozy-title{ font-family: Gaegu, Pretendard, sans-serif; letter-spacing: 0.2px; }
-    .cozy-note{ font-family: Gaegu, Pretendard, sans-serif; }
+    .cozy-title{ font-family: Gaegu, Pretendard, sans-serif; letter-spacing: 0.2px; font-weight: 700; }
+    .cozy-note{ font-family: Gaegu, Pretendard, sans-serif; font-weight: 600; }
     .mobile-shell { max-width: 480px; margin: 0 auto; }
     .tab-bar-shadow { box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.08); }
     .safe-bottom { padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px)); }
+    @keyframes fish-shake {
+      0% { transform: translateX(0) rotate(0deg); }
+      25% { transform: translateX(-1px) rotate(-2deg); }
+      50% { transform: translateX(1px) rotate(2deg); }
+      75% { transform: translateX(-1px) rotate(-1deg); }
+      100% { transform: translateX(0) rotate(0deg); }
+    }
+    @keyframes boom-pop {
+      0% { transform: scale(0.85); opacity: 0.7; }
+      60% { transform: scale(1.05); opacity: 1; }
+      100% { transform: scale(1); opacity: 0.95; }
+    }
+    .fish-shake { animation: fish-shake 0.28s infinite; transform-origin: 50% 50%; }
+    .boom-pop { animation: boom-pop 0.45s ease-out; }
   </style>
 </head>
 <body>
@@ -493,13 +507,64 @@
       );
     }
 
-    function StatusBanner({ messages, dark }) {
+    function BudgetUrgencySticker({ ratio, dark }) {
+      const stage = ratio > 1 ? "boom" : ratio > 0.8 ? "panic" : ratio > 0.5 ? "alert" : "calm";
+      const ropeHeight = stage === "calm" ? 64 : stage === "alert" ? 44 : stage === "panic" ? 26 : 18;
+      const face = stage === "calm"
+        ? { eyeR: 2.1, mouth: "M38 33 Q43 36 48 33", sweat: false }
+        : stage === "alert"
+          ? { eyeR: 3.2, mouth: "M37 35 Q43 31 49 35", sweat: true }
+          : { eyeR: 3.6, mouth: "M37 35 Q43 30 49 35", sweat: true };
+
+      return (
+        <div className={`w-[168px] h-[130px] rounded-2xl border relative overflow-hidden ${dark ? "bg-slate-900/60 border-slate-700" : "bg-white/75 border-gray-200"}`}>
+          <div className={`absolute top-1 left-1/2 -translate-x-1/2 text-[11px] px-2 py-0.5 rounded-full ${dark ? "bg-slate-800 text-slate-200" : "bg-slate-100 text-slate-700"}`}>
+            {stage === "calm" ? "평온" : stage === "alert" ? "주의" : stage === "panic" ? "위급" : "폭발"}
+          </div>
+          <svg width="168" height="130" viewBox="0 0 168 130">
+            <line x1="84" y1="0" x2="84" y2={ropeHeight} stroke={dark ? "#94a3b8" : "#64748b"} strokeWidth="2.2" strokeLinecap="round" />
+            {stage !== "boom" ? (
+              <g className={stage === "panic" ? "fish-shake" : ""} transform={`translate(50 ${ropeHeight})`}>
+                <path d="M34 21 C30 12, 20 8, 10 12 C16 17, 16 27, 10 32 C21 36, 30 32, 34 24 Z" fill={dark ? "#475569" : "#9CA3AF"} />
+                <ellipse cx="44" cy="22" rx="24" ry="16" fill={stage === "calm" ? "#9EE7D4" : stage === "alert" ? "#FFE28A" : "#FFB38A"} stroke={dark ? "#334155" : "#64748b"} strokeWidth="2" />
+                <path d="M57 22 C67 18, 74 12, 80 10 C76 18, 76 26, 80 34 C74 31, 67 26, 57 22 Z" fill={stage === "calm" ? "#8FD8F7" : stage === "alert" ? "#FFBFA1" : "#FFA6D6"} stroke={dark ? "#334155" : "#64748b"} strokeWidth="2" />
+                <circle cx="39" cy="20" r={face.eyeR} fill="#0f172a" />
+                <circle cx="47" cy="20" r={face.eyeR} fill="#0f172a" />
+                <path d={face.mouth} stroke="#0f172a" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+                {face.sweat && <path d="M54 12 C58 6, 61 11, 58 16 C56 18, 53 16, 54 12 Z" fill="#7FD3FF" stroke="#38BDF8" strokeWidth="1" />}
+                <circle cx="44" cy="22" r="1.2" fill={dark ? "#cbd5e1" : "#fff"} opacity="0.7" />
+              </g>
+            ) : (
+              <g className="boom-pop" transform="translate(54 22)">
+                <circle cx="30" cy="34" r="22" fill="#374151" stroke="#111827" strokeWidth="2" />
+                <path d="M30 12 C26 4, 34 2, 35 10" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />
+                <circle cx="24" cy="30" r="3.1" fill="#f8fafc" />
+                <circle cx="36" cy="36" r="3.1" fill="#f8fafc" />
+                <path d="M24 44 Q30 48 36 44" stroke="#f8fafc" strokeWidth="2" fill="none" />
+                <path d="M86 34 L92 29 L98 34 L92 39 Z" fill="#FF8FA3" />
+                <text x="74" y="24" fontSize="18" fontWeight="700" fill={dark ? "#fde68a" : "#fb7185"} className="cozy-note">펑!</text>
+              </g>
+            )}
+          </svg>
+        </div>
+      );
+    }
+
+    function StatusBanner({ messages, dark, urgencyRatio, urgencyLabel }) {
       if (!messages.length) return null;
       return (
-        <div className={`rounded-2xl border p-3 mb-4 space-y-1 cozy-note ${dark ? "paper-card border-slate-700" : "paper-card border-gray-200"}`}>
-          {messages.map((msg, i) => (
-            <p key={i} className={`text-sm ${dark ? "text-slate-200" : "text-slate-800"}`}>{msg}</p>
-          ))}
+        <div className={`rounded-2xl border p-4 mb-4 cozy-note ${dark ? "paper-card border-slate-700" : "paper-card border-gray-200"}`}>
+          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+            <div className="flex-1 space-y-1.5">
+              {messages.map((msg, i) => (
+                <p key={i} className={`text-sm ${dark ? "text-slate-200" : "text-slate-800"}`}>{msg}</p>
+              ))}
+              <p className={`text-xs mt-2 ${dark ? "text-slate-300" : "text-slate-600"}`}>
+                자린고비 생선 위급도: <strong>{urgencyLabel}</strong> ({Math.round((urgencyRatio || 0) * 100)}%)
+              </p>
+            </div>
+            <BudgetUrgencySticker ratio={urgencyRatio || 0} dark={dark} />
+          </div>
         </div>
       );
     }
@@ -1363,6 +1428,20 @@
         return msgs;
       }, [cursorMonth, monthExpense, lastMonthExpense, selectedCategoryId, categoryMap, currentStats.amountMap, monthData.budgets]);
 
+      const urgencyInfo = useMemo(() => {
+        const expenseCats = categoriesByType.expense;
+        const ratios = expenseCats
+          .map((cat) => {
+            const budget = monthData.budgets[cat.id] || 0;
+            const spent = currentStats.amountMap[cat.id] || 0;
+            return budget > 0 ? spent / budget : 0;
+          })
+          .filter((r) => Number.isFinite(r));
+        const ratio = ratios.length ? Math.max(...ratios) : 0;
+        const label = ratio > 1 ? "예산 폭발" : ratio > 0.8 ? "긴급 경보" : ratio > 0.5 ? "주의 단계" : "안정 단계";
+        return { ratio, label };
+      }, [categoriesByType.expense, monthData.budgets, currentStats.amountMap]);
+
       const addEntry = (ev) => {
         ev.preventDefault();
         const n = Number(String(amount).replace(/[^\d]/g, ""));
@@ -1613,7 +1692,7 @@
               </div>
             </header>
 
-            <StatusBanner messages={statusMessages} dark={dark} />
+            <StatusBanner messages={statusMessages} dark={dark} urgencyRatio={urgencyInfo.ratio} urgencyLabel={urgencyInfo.label} />
 
             {isMobileView ? activeTabContent : (
               <DesktopDashboard
