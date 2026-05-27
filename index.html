@@ -567,40 +567,40 @@
       );
     }
 
-    function EntryForm({ entryType, setEntryType, amount, setAmount, addQuickAmount, selectedCategoryId, setSelectedCategoryId, categoriesByType, entryDate, setEntryDate, memo, setMemo, onSubmit, dark, inputClass, cardClass }) {
+    function EntryForm({ entryType, setEntryType, amount, setAmount, addQuickAmount, selectedCategoryId, setSelectedCategoryId, categoriesByType, entryDate, setEntryDate, memo, setMemo, onSubmit, dark, inputClass, cardClass, wide }) {
       return (
-        <form onSubmit={onSubmit} className={`rounded-2xl border p-4 ${cardClass}`}>
-          <h2 className="font-semibold mb-3">수입 / 지출 입력</h2>
-          <div className="grid grid-cols-2 gap-2 mb-3">
-            <button type="button" onClick={() => setEntryType("expense")} className={`py-2.5 rounded-xl font-semibold ${entryType === "expense" ? "bg-red-500 text-white" : dark ? "bg-slate-800" : "bg-slate-100"}`}>지출</button>
-            <button type="button" onClick={() => setEntryType("income")} className={`py-2.5 rounded-xl font-semibold ${entryType === "income" ? "bg-emerald-500 text-white" : dark ? "bg-slate-800" : "bg-slate-100"}`}>수입</button>
+        <form onSubmit={onSubmit} className={`rounded-2xl border p-4 sm:p-6 ${cardClass}`}>
+          <h2 className="font-semibold text-lg mb-4">수입 / 지출 입력</h2>
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <button type="button" onClick={() => setEntryType("expense")} className={`py-3 rounded-xl font-semibold text-base ${entryType === "expense" ? "bg-red-500 text-white" : dark ? "bg-slate-800" : "bg-slate-100"}`}>지출</button>
+            <button type="button" onClick={() => setEntryType("income")} className={`py-3 rounded-xl font-semibold text-base ${entryType === "income" ? "bg-emerald-500 text-white" : dark ? "bg-slate-800" : "bg-slate-100"}`}>수입</button>
           </div>
-          <label className={`text-xs block mb-1 ${dark ? "text-slate-400" : "text-slate-500"}`}>금액</label>
+          <label className={`text-sm block mb-1 ${dark ? "text-slate-400" : "text-slate-500"}`}>금액</label>
           <input
             type="text"
             inputMode="numeric"
             value={amount}
             onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ""))}
-            className={`w-full rounded-xl border px-3 py-3 text-2xl font-bold mb-3 ${inputClass}`}
+            className={`w-full rounded-xl border px-4 py-4 font-bold mb-4 ${wide ? "text-3xl" : "text-2xl"} ${inputClass}`}
           />
-          <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className={`grid grid-cols-2 gap-3 mb-5 ${wide ? "sm:grid-cols-4" : ""}`}>
             {QUICK_AMOUNTS.map((v) => (
               <button key={v} type="button" onClick={() => addQuickAmount(v)} className="py-4 rounded-xl text-lg font-bold bg-brand-blue text-white">
                 +{v >= 10000 ? `${v / 10000}만` : `${v / 1000}천`}
               </button>
             ))}
           </div>
-          <label className={`text-xs block mb-1 ${dark ? "text-slate-400" : "text-slate-500"}`}>카테고리</label>
-          <select value={selectedCategoryId} onChange={(e) => setSelectedCategoryId(e.target.value)} className={`w-full rounded-xl border px-3 py-2 mb-3 ${inputClass}`}>
+          <label className={`text-sm block mb-1 ${dark ? "text-slate-400" : "text-slate-500"}`}>카테고리</label>
+          <select value={selectedCategoryId} onChange={(e) => setSelectedCategoryId(e.target.value)} className={`w-full rounded-xl border px-4 py-3 mb-4 text-base ${inputClass}`}>
             {(categoriesByType[entryType] || []).map((cat) => (
               <option key={cat.id} value={cat.id}>{cat.name}</option>
             ))}
           </select>
-          <label className={`text-xs block mb-1 ${dark ? "text-slate-400" : "text-slate-500"}`}>날짜</label>
-          <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} className={`w-full rounded-xl border px-3 py-2 mb-3 ${inputClass}`} />
-          <label className={`text-xs block mb-1 ${dark ? "text-slate-400" : "text-slate-500"}`}>메모</label>
-          <input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} className={`w-full rounded-xl border px-3 py-2 mb-4 ${inputClass}`} />
-          <button type="submit" className="w-full py-3.5 rounded-xl bg-slate-900 text-white font-semibold text-base">기록 저장</button>
+          <label className={`text-sm block mb-1 ${dark ? "text-slate-400" : "text-slate-500"}`}>날짜</label>
+          <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} className={`w-full rounded-xl border px-4 py-3 mb-4 text-base ${inputClass}`} />
+          <label className={`text-sm block mb-1 ${dark ? "text-slate-400" : "text-slate-500"}`}>메모</label>
+          <input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} className={`w-full rounded-xl border px-4 py-3 mb-5 text-base ${inputClass}`} />
+          <button type="submit" className="w-full py-4 rounded-xl bg-slate-900 text-white font-semibold text-lg">기록 저장</button>
         </form>
       );
     }
@@ -684,12 +684,79 @@
       );
     }
 
-    function MobileTabBar({ activeTab, onTabChange, dark }) {
+    function AssetBudgetSection({ monthData, setMonthData, monthIncome, monthExpense, categoriesByType, currentStats, monthDataBudgets, updateBudget, dark, cardClass, inputClass, subtle }) {
+      return (
+        <div className={`rounded-2xl border p-4 sm:p-6 ${cardClass}`}>
+          <h2 className="font-semibold text-lg mb-4">자산 및 예산 현황</h2>
+          <label className={`text-sm block mb-1 ${subtle}`}>현재 보유 자산</label>
+          <input
+            type="number"
+            value={monthData.asset || ""}
+            onChange={(e) => setMonthData((prev) => ({ ...prev, asset: Math.max(0, Number(e.target.value) || 0) }))}
+            className={`w-full rounded-xl border px-4 py-3 mb-4 text-base ${inputClass}`}
+          />
+          <div className="grid grid-cols-3 gap-3 text-center mb-5">
+            <div className={`rounded-xl p-3 ${dark ? "bg-slate-800" : "bg-slate-50"}`}>
+              <p className={`text-xs ${subtle}`}>수입</p>
+              <p className="font-bold text-emerald-500 text-base sm:text-lg">{formatKRW(monthIncome)}</p>
+            </div>
+            <div className={`rounded-xl p-3 ${dark ? "bg-slate-800" : "bg-slate-50"}`}>
+              <p className={`text-xs ${subtle}`}>지출</p>
+              <p className="font-bold text-red-500 text-base sm:text-lg">{formatKRW(monthExpense)}</p>
+            </div>
+            <div className={`rounded-xl p-3 ${dark ? "bg-slate-800" : "bg-slate-50"}`}>
+              <p className={`text-xs ${subtle}`}>잔여</p>
+              <p className="font-bold text-base sm:text-lg">{formatKRW(monthData.asset + monthIncome - monthExpense)}</p>
+            </div>
+          </div>
+          <h3 className="font-semibold mb-3">카테고리별 예산 소진율</h3>
+          <div className="space-y-3">
+            {categoriesByType.expense.map((cat) => (
+              <BudgetProgressBar
+                key={cat.id}
+                cat={cat}
+                spent={currentStats.amountMap[cat.id] || 0}
+                count={currentStats.countMap[cat.id] || 0}
+                budget={monthDataBudgets[cat.id] || 0}
+                onBudgetChange={updateBudget}
+                dark={dark}
+                inputClass={inputClass}
+              />
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    function TabBar({ activeTab, onTabChange, dark, cardClass, variant }) {
       const tabs = [
         { id: "home", label: "홈", icon: "🏠" },
         { id: "input", label: "입력", icon: "✏️" },
         { id: "analysis", label: "분석", icon: "📊" }
       ];
+
+      if (variant === "desktop") {
+        return (
+          <nav className={`rounded-2xl border p-2 flex gap-2 mb-5 ${cardClass}`}>
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => onTabChange(tab.id)}
+                className={`flex-1 py-3 px-4 rounded-xl text-base font-semibold transition-colors flex items-center justify-center gap-2 ${
+                  activeTab === tab.id
+                    ? "bg-brand-blue text-white"
+                    : dark ? "text-slate-300 hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <span>{tab.icon}</span>
+                <span>{tab.label}</span>
+              </button>
+            ))}
+          </nav>
+        );
+      }
+
       return (
         <nav className={`fixed bottom-0 left-0 right-0 z-50 tab-bar-shadow border-t ${dark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"}`}>
           <div className="mobile-shell grid grid-cols-3">
@@ -912,145 +979,109 @@
       const card = dark ? "bg-slate-900 border-slate-800 text-slate-100" : "bg-white border-slate-100 text-slate-900";
       const input = dark ? "bg-slate-800 border-slate-700 text-slate-100" : "bg-white border-slate-200 text-slate-900";
       const subtle = dark ? "text-slate-400" : "text-slate-500";
-      const shellClass = isMobileView ? "mobile-shell" : "max-w-7xl mx-auto";
-      const contentPad = isMobileView ? "safe-bottom" : "pb-10";
+      const shellClass = isMobileView ? "mobile-shell" : "max-w-6xl mx-auto w-full";
+      const contentPad = isMobileView ? "safe-bottom" : "pb-12";
 
-      const homeContent = (
+      const categoryManagerBlock = (
+        <CategoryManager
+          monthData={monthData}
+          dark={dark}
+          inputClass={input}
+          onAdd={addCategory}
+          onDelete={deleteCategory}
+          onColorChange={updateCategoryColor}
+          newCategoryName={newCategoryName}
+          setNewCategoryName={setNewCategoryName}
+          newCategoryType={newCategoryType}
+          setNewCategoryType={setNewCategoryType}
+          newCategoryColor={newCategoryColor}
+          setNewCategoryColor={setNewCategoryColor}
+        />
+      );
+
+      const entryFormBlock = (
+        <EntryForm
+          entryType={entryType}
+          setEntryType={setEntryType}
+          amount={amount}
+          setAmount={setAmount}
+          addQuickAmount={addQuickAmount}
+          selectedCategoryId={selectedCategoryId}
+          setSelectedCategoryId={setSelectedCategoryId}
+          categoriesByType={categoriesByType}
+          entryDate={entryDate}
+          setEntryDate={setEntryDate}
+          memo={memo}
+          setMemo={setMemo}
+          onSubmit={addEntry}
+          dark={dark}
+          inputClass={input}
+          cardClass={card}
+          wide={!isMobileView}
+        />
+      );
+
+      const calendarBlock = (
+        <div className={`rounded-2xl border p-4 sm:p-6 ${card}`}>
+          <h2 className="font-semibold text-lg mb-4">달력</h2>
+          <CalendarGrid
+            month={cursorMonth}
+            entriesByDate={entriesByDate}
+            categoryMap={categoryMap}
+            onDateClick={setOpenDate}
+            dark={dark}
+            wide={!isMobileView}
+          />
+        </div>
+      );
+
+      const assetBudgetBlock = (
+        <AssetBudgetSection
+          monthData={monthData}
+          setMonthData={setMonthData}
+          monthIncome={monthIncome}
+          monthExpense={monthExpense}
+          categoriesByType={categoriesByType}
+          currentStats={currentStats}
+          monthDataBudgets={monthData.budgets}
+          updateBudget={updateBudget}
+          dark={dark}
+          cardClass={card}
+          inputClass={input}
+          subtle={subtle}
+        />
+      );
+
+      const mobileHomeContent = (
         <div className="space-y-4">
           <MonthNav cursorMonth={cursorMonth} onPrev={goPrevMonth} onNext={goNextMonth} dark={dark} cardClass={card} />
+          {assetBudgetBlock}
+          {entryFormBlock}
+          {categoryManagerBlock}
+          {calendarBlock}
+          <DetailList entries={monthData.entries} categoryMap={categoryMap} dark={dark} cardClass={card} />
+          <DonutSection donutLabels={donutLabels} donutValues={donutValues} donutColors={donutColors} dark={dark} cardClass={card} />
+        </div>
+      );
 
-          <div className={`rounded-2xl border p-4 ${card}`}>
-            <h2 className="font-semibold mb-3">자산 및 예산 현황</h2>
-            <label className={`text-xs block mb-1 ${subtle}`}>현재 보유 자산</label>
-            <input
-              type="number"
-              value={monthData.asset || ""}
-              onChange={(e) => setMonthData((prev) => ({ ...prev, asset: Math.max(0, Number(e.target.value) || 0) }))}
-              className={`w-full rounded-xl border px-3 py-2 mb-3 ${input}`}
-            />
-            <div className="grid grid-cols-3 gap-2 text-center text-sm mb-4">
-              <div className={`rounded-xl p-2 ${dark ? "bg-slate-800" : "bg-slate-50"}`}>
-                <p className={`text-xs ${subtle}`}>수입</p>
-                <p className="font-bold text-emerald-500">{formatKRW(monthIncome)}</p>
-              </div>
-              <div className={`rounded-xl p-2 ${dark ? "bg-slate-800" : "bg-slate-50"}`}>
-                <p className={`text-xs ${subtle}`}>지출</p>
-                <p className="font-bold text-red-500">{formatKRW(monthExpense)}</p>
-              </div>
-              <div className={`rounded-xl p-2 ${dark ? "bg-slate-800" : "bg-slate-50"}`}>
-                <p className={`text-xs ${subtle}`}>잔여</p>
-                <p className="font-bold">{formatKRW(monthData.asset + monthIncome - monthExpense)}</p>
-              </div>
-            </div>
-
-            <h3 className="font-semibold text-sm mb-2">카테고리별 예산 소진율</h3>
-            <div className="space-y-2">
-              {categoriesByType.expense.map((cat) => (
-                <BudgetProgressBar
-                  key={cat.id}
-                  cat={cat}
-                  spent={currentStats.amountMap[cat.id] || 0}
-                  count={currentStats.countMap[cat.id] || 0}
-                  budget={monthData.budgets[cat.id] || 0}
-                  onBudgetChange={updateBudget}
-                  dark={dark}
-                  inputClass={input}
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className={`rounded-2xl border p-4 ${card}`}>
-            <h2 className="font-semibold mb-3">달력</h2>
-            <CalendarGrid
-              month={cursorMonth}
-              entriesByDate={entriesByDate}
-              categoryMap={categoryMap}
-              onDateClick={setOpenDate}
-              dark={dark}
-              wide={!isMobileView}
-            />
-          </div>
-
-          {isMobileView && (
-            <>
-              <EntryForm
-                entryType={entryType}
-                setEntryType={setEntryType}
-                amount={amount}
-                setAmount={setAmount}
-                addQuickAmount={addQuickAmount}
-                selectedCategoryId={selectedCategoryId}
-                setSelectedCategoryId={setSelectedCategoryId}
-                categoriesByType={categoriesByType}
-                entryDate={entryDate}
-                setEntryDate={setEntryDate}
-                memo={memo}
-                setMemo={setMemo}
-                onSubmit={addEntry}
-                dark={dark}
-                inputClass={input}
-                cardClass={card}
-              />
-              <DonutSection
-                donutLabels={donutLabels}
-                donutValues={donutValues}
-                donutColors={donutColors}
-                dark={dark}
-                cardClass={card}
-              />
-              <DetailList
-                entries={monthData.entries}
-                categoryMap={categoryMap}
-                dark={dark}
-                cardClass={card}
-              />
-            </>
-          )}
-
-          <CategoryManager
-            monthData={monthData}
-            dark={dark}
-            inputClass={input}
-            onAdd={addCategory}
-            onDelete={deleteCategory}
-            onColorChange={updateCategoryColor}
-            newCategoryName={newCategoryName}
-            setNewCategoryName={setNewCategoryName}
-            newCategoryType={newCategoryType}
-            setNewCategoryType={setNewCategoryType}
-            newCategoryColor={newCategoryColor}
-            setNewCategoryColor={setNewCategoryColor}
-          />
+      const pcHomeContent = (
+        <div className="space-y-5">
+          <MonthNav cursorMonth={cursorMonth} onPrev={goPrevMonth} onNext={goNextMonth} dark={dark} cardClass={card} />
+          {assetBudgetBlock}
+          {calendarBlock}
+          {categoryManagerBlock}
         </div>
       );
 
       const inputContent = (
-        <div className="space-y-4">
+        <div className="space-y-5">
           <MonthNav cursorMonth={cursorMonth} onPrev={goPrevMonth} onNext={goNextMonth} dark={dark} cardClass={card} />
-          <EntryForm
-            entryType={entryType}
-            setEntryType={setEntryType}
-            amount={amount}
-            setAmount={setAmount}
-            addQuickAmount={addQuickAmount}
-            selectedCategoryId={selectedCategoryId}
-            setSelectedCategoryId={setSelectedCategoryId}
-            categoriesByType={categoriesByType}
-            entryDate={entryDate}
-            setEntryDate={setEntryDate}
-            memo={memo}
-            setMemo={setMemo}
-            onSubmit={addEntry}
-            dark={dark}
-            inputClass={input}
-            cardClass={card}
-          />
+          {entryFormBlock}
         </div>
       );
 
       const analysisContent = (
-        <div className="space-y-4">
+        <div className="space-y-5">
           <MonthNav cursorMonth={cursorMonth} onPrev={goPrevMonth} onNext={goNextMonth} dark={dark} cardClass={card} />
           <AnalysisPanel
             trendRows={trendRows}
@@ -1065,13 +1096,19 @@
         </div>
       );
 
+      const activeTabContent = activeTab === "home"
+        ? (isMobileView ? mobileHomeContent : pcHomeContent)
+        : activeTab === "input"
+          ? inputContent
+          : analysisContent;
+
       return (
         <div className={`${dark ? "bg-slate-950 text-slate-100" : "text-slate-900 bg-slate-100"} min-h-screen ${contentPad}`}>
-          <div className={`${shellClass} px-4 py-4`}>
-            <header className="mb-4">
+          <div className={`${shellClass} px-4 sm:px-6 py-4 sm:py-6`}>
+            <header className="mb-4 sm:mb-6">
               <div className="flex items-center justify-between gap-2 mb-3">
-                <h1 className="text-xl sm:text-2xl font-bold">용돈 관리 앱</h1>
-                <button onClick={() => setTheme(dark ? "light" : "dark")} className={`px-3 py-1.5 rounded-lg text-xs border ${card}`}>
+                <h1 className="text-xl sm:text-3xl font-bold">용돈 관리 앱</h1>
+                <button onClick={() => setTheme(dark ? "light" : "dark")} className={`px-3 py-2 rounded-lg text-sm border ${card}`}>
                   {dark ? "라이트" : "다크"}
                 </button>
               </div>
@@ -1094,33 +1131,19 @@
               </div>
             </header>
 
-            <StatusBanner messages={statusMessages} dark={dark} />
-
-            {isMobileView ? (
-              <div>
-                {activeTab === "home" && homeContent}
-                {activeTab === "input" && inputContent}
-                {activeTab === "analysis" && analysisContent}
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-                <div className="xl:col-span-1 space-y-4">
-                  {homeContent}
-                </div>
-                <div className="xl:col-span-1">
-                  {inputContent}
-                </div>
-                <div className="xl:col-span-1">
-                  {analysisContent}
-                </div>
-              </div>
+            {!isMobileView && (
+              <TabBar activeTab={activeTab} onTabChange={setActiveTab} dark={dark} cardClass={card} variant="desktop" />
             )}
 
-            <p className={`text-center text-xs mt-6 ${subtle}`}>저장 키: {APP_NAMESPACE}:YYYY-MM</p>
+            <StatusBanner messages={statusMessages} dark={dark} />
+
+            {activeTabContent}
+
+            <p className={`text-center text-xs mt-8 ${subtle}`}>저장 키: {APP_NAMESPACE}:YYYY-MM</p>
           </div>
 
           {isMobileView && (
-            <MobileTabBar activeTab={activeTab} onTabChange={setActiveTab} dark={dark} />
+            <TabBar activeTab={activeTab} onTabChange={setActiveTab} dark={dark} cardClass={card} variant="mobile" />
           )}
 
           <DateDetailModal
