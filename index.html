@@ -164,11 +164,25 @@
       { id: "inc-etc", name: "기타", type: "income", color: "#A8B3C7" }
     ];
 
-    function getFishSpeechMessage(ratio) {
+    function getFishSpeechMessage({ ratio, pace, runaway }) {
+      // Budget-driven (higher priority)
       if (ratio > 1) return "펑-! 내가 폭탄 된다고 했잖아. 이번 달 남은 날은 손가락만 빨고 살아야겠네.. 💣";
       if (ratio > 0.8) return "나 지금 목 매달리기 직전이야. 네 통장도 나만큼 숨 가쁘게 헐떡이는 중인데... 제발 멈춰!";
       if (ratio > 0.5) return "어라, 줄이 왜 올라가지...?  방금 긁은 거 진짜 꼭 필요했던 거 맞아?";
-      return "아직은 줄이 넉넉해서 나도 편해. 이대로만 살자, 인간다운 삶 가능! ✨";
+
+      // Trend-driven (only when calm: ≤ 50%)
+      if (runaway) {
+        return "지난달 전체 지출액을 벌써 따라잡으려고 해?! 이 속도 추이면 나 진짜 조만간 폭탄으로 터져, 내 목숨이 위험하다고! 💣";
+      }
+      if (pace === "slower") {
+        return "오... 지난달 이맘때랑 비교해보니까 지출 그래프가 훨씬 완만해. 덕분에 나도 숨통이 좀 트인다, 아주 잘하고 있어! ✨";
+      }
+      if (pace === "faster") {
+        return "잠깐만, 지출 추이가 이상한데? 지난달 이맘때보다 훨씬 가파르게 쓰고 있어! 너 이번 달 유독 고삐 풀린 것 같아. 제발 멈춰...!";
+      }
+
+      // Default calm
+      return "아직은 줄이 넉넉해서 나도 편해. 이대로만 유지하자, 인간다운 삶 가능! ✨";
     }
 
     const pad = (n) => String(n).padStart(2, "0");
@@ -1509,8 +1523,20 @@
           })
           .filter((r) => Number.isFinite(r));
         const ratio = ratios.length ? Math.max(...ratios) : 0;
-        return { ratio, message: getFishSpeechMessage(ratio) };
-      }, [categoriesByType.expense, monthData.budgets, currentStats.amountMap]);
+        const pace = computeSpendingPace(cursorMonth, monthExpense, lastMonthExpense);
+        const dayOfMonth = Number(String(entryDate).slice(8, 10)) || 1;
+        const endBufferDay = Math.max(daysInMonth(cursorMonth) - 3, 1);
+        const runaway = lastMonthExpense > 0 && monthExpense >= lastMonthExpense && dayOfMonth <= endBufferDay;
+        return { ratio, message: getFishSpeechMessage({ ratio, pace, runaway }) };
+      }, [
+        categoriesByType.expense,
+        monthData.budgets,
+        currentStats.amountMap,
+        cursorMonth,
+        monthExpense,
+        lastMonthExpense,
+        entryDate
+      ]);
 
       const addEntry = (ev) => {
         ev.preventDefault();
