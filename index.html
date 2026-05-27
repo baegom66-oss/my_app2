@@ -521,10 +521,10 @@
       const stage = ratio > 1 ? "boom" : ratio > 0.8 ? "panic" : ratio > 0.5 ? "alert" : "calm";
       const ropeHeight = stage === "calm" ? 64 : stage === "alert" ? 44 : stage === "panic" ? 26 : 18;
       const face = stage === "calm"
-        ? { eyeR: 1.9, mouth: "M42 33 Q45 35 48 33", sweat: false }
+        ? { eyeR: 1.8, sweat: false, panicLines: false }
         : stage === "alert"
-          ? { eyeR: 2.7, mouth: "M41 35 Q45 31 49 35", sweat: true }
-          : { eyeR: 3.1, mouth: "M41 35 Q45 30 49 35", sweat: true };
+          ? { eyeR: 2.2, sweat: true, panicLines: false }
+          : { eyeR: 2.4, sweat: true, panicLines: true };
 
       return (
         <div className={`w-[168px] h-[130px] rounded-2xl border relative overflow-hidden ${dark ? "bg-slate-900/80 border-slate-700" : "bg-[#fffefb] border-gray-200"}`}>
@@ -536,13 +536,19 @@
             {stage !== "boom" ? (
               <g className={stage === "panic" ? "fish-shake" : ""} transform={`translate(50 ${ropeHeight})`}>
                 <path d="M22 30 C14 25, 10 17, 14 11 C20 8, 26 11, 30 16 C28 22, 26 26, 22 30 Z" fill={dark ? "#6b7280" : "#c0c6d0"} stroke={dark ? "#475569" : "#8e99ab"} strokeWidth="1.6" strokeLinejoin="round" />
-                <path d="M31 17 C36 9, 50 6, 61 10 C70 13, 75 20, 72 26 C67 33, 52 37, 40 34 C31 32, 28 24, 31 17 Z" fill={stage === "calm" ? "#9bbdc4" : stage === "alert" ? "#d8c4a2" : "#d9b1b8"} stroke={dark ? "#64748b" : "#7b879a"} strokeWidth="1.8" strokeLinejoin="round" />
-                <path d="M63 20 C69 17, 74 15, 80 14 C76 18, 76 24, 80 29 C74 28, 69 26, 63 23 Z" fill={stage === "calm" ? "#89abb2" : stage === "alert" ? "#c9b493" : "#c7a2a9"} stroke={dark ? "#64748b" : "#7b879a"} strokeWidth="1.7" strokeLinejoin="round" />
+                <path d="M31 17 C36 9, 50 6, 61 10 C70 13, 75 20, 72 26 C67 33, 52 37, 40 34 C31 32, 28 24, 31 17 Z" fill="#A9D8F3" stroke={dark ? "#64748b" : "#7b879a"} strokeWidth="1.8" strokeLinejoin="round" />
+                <path d="M63 20 C69 17, 74 15, 80 14 C76 18, 76 24, 80 29 C74 28, 69 26, 63 23 Z" fill="#8FC8EB" stroke={dark ? "#64748b" : "#7b879a"} strokeWidth="1.7" strokeLinejoin="round" />
                 <path d="M35 22 C41 19, 49 18, 57 21" stroke={dark ? "#7a8798" : "#8d98a8"} strokeWidth="1.2" fill="none" strokeLinecap="round" />
                 <circle cx="41" cy="21" r={face.eyeR} fill="#1f2937" />
                 <circle cx="48" cy="21" r={face.eyeR} fill="#1f2937" />
-                <path d={face.mouth} stroke="#1f2937" strokeWidth="1.5" fill="none" strokeLinecap="round" />
                 {face.sweat && <path d="M54 13 C57 8, 60 12, 58 16 C56 18, 53 17, 54 13 Z" fill="#9fc7d9" stroke="#85afc2" strokeWidth="0.9" />}
+                {face.panicLines && (
+                  <>
+                    <line x1="37" y1="11" x2="37" y2="16" stroke="#5FA6D8" strokeWidth="1.6" strokeLinecap="round" />
+                    <line x1="43.5" y1="10" x2="43.5" y2="16" stroke="#5FA6D8" strokeWidth="1.6" strokeLinecap="round" />
+                    <line x1="50" y1="11" x2="50" y2="16" stroke="#5FA6D8" strokeWidth="1.6" strokeLinecap="round" />
+                  </>
+                )}
                 <circle cx="45" cy="23" r="0.95" fill={dark ? "#e2e8f0" : "#ffffff"} opacity="0.7" />
               </g>
             ) : (
@@ -607,9 +613,6 @@
               {messages.map((msg, i) => (
                 <p key={i} className={`text-sm ${dark ? "text-slate-200" : "text-slate-800"}`}>{msg}</p>
               ))}
-              <p className={`text-xs mt-2 ${dark ? "text-slate-300" : "text-slate-600"}`}>
-                자린고비 생선 위급도: <strong>{urgencyLabel}</strong> ({Math.round((urgencyRatio || 0) * 100)}%)
-              </p>
             </div>
             <BudgetUrgencySticker ratio={urgencyRatio || 0} dark={dark} />
           </div>
