@@ -3,21 +3,21 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>용돈 관리 — Pocket Money Manager</title>
+  <title>용돈 관리 앱</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
-      darkMode: 'class',
+      darkMode: "class",
       theme: {
         extend: {
           colors: {
-            toss: { blue: '#3182F6', sky: '#E8F3FF', mint: '#00C853', warn: '#FF6B6B' },
+            brand: { blue: "#2563EB", sky: "#DBEAFE" }
           },
           fontFamily: {
-            sans: ['Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', 'sans-serif'],
-          },
-        },
-      },
+            sans: ["Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "sans-serif"]
+          }
+        }
+      }
     };
   </script>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
@@ -25,642 +25,611 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
-    body { background: #F2F4F6; transition: background-color .2s; }
-    body.dark { background: #0B1220; }
-    .tab-active { color: #3182F6; border-bottom-color: #3182F6; }
+    body { background: #f1f5f9; }
+    body.dark { background: #020617; }
   </style>
 </head>
 <body>
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect, useMemo, useRef, useCallback } = React;
+    const { useEffect, useMemo, useState } = React;
 
-    const STORAGE_KEY = 'pocket-money-manager-v1';
-    const EXPENSE_CATS = ['식비', '교통', '문화/여가', '쇼핑', '교육', '기타'];
-    const INCOME_CATS = ['용돈', '알바', '보너스', '기타'];
+    const APP_NAMESPACE = "allowance-manager-v3";
+    const LEGACY_KEY = "pocket-money-manager-v1";
+    const QUICK_AMOUNTS = [5000, 10000, 50000, 100000];
+    const COLOR_POOL = ["#EF4444", "#F97316", "#EAB308", "#22C55E", "#06B6D4", "#3B82F6", "#8B5CF6", "#EC4899", "#64748B"];
 
-    function loadState() {
+    const DEFAULT_EXPENSE_CATEGORIES = [
+      { id: "exp-food", name: "식비", type: "expense", color: "#EF4444" },
+      { id: "exp-transport", name: "교통", type: "expense", color: "#3B82F6" },
+      { id: "exp-fun", name: "여가", type: "expense", color: "#EAB308" },
+      { id: "exp-shopping", name: "쇼핑", type: "expense", color: "#EC4899" },
+      { id: "exp-etc", name: "기타", type: "expense", color: "#64748B" }
+    ];
+    const DEFAULT_INCOME_CATEGORIES = [
+      { id: "inc-allowance", name: "용돈", type: "income", color: "#22C55E" },
+      { id: "inc-parttime", name: "알바", type: "income", color: "#06B6D4" },
+      { id: "inc-bonus", name: "보너스", type: "income", color: "#8B5CF6" },
+      { id: "inc-etc", name: "기타", type: "income", color: "#64748B" }
+    ];
+
+    const pad = (n) => String(n).padStart(2, "0");
+    const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const isMonth = (v) => /^\d{4}-\d{2}$/.test(v || "");
+    const nowMonth = () => {
+      const d = new Date();
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+    };
+    const formatKRW = (v) => new Intl.NumberFormat("ko-KR", { style: "currency", currency: "KRW", maximumFractionDigits: 0 }).format(v || 0);
+    const monthToLabel = (m) => `${m.slice(0, 4)}년 ${Number(m.slice(5, 7))}월`;
+    const monthCompare = (a, b) => a.localeCompare(b);
+    const shiftMonth = (m, diff) => {
+      const [y, mm] = m.split("-").map(Number);
+      const d = new Date(y, mm - 1 + diff, 1);
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+    };
+    const toDateKey = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+    const MONTH_INDEX_KEY = `${APP_NAMESPACE}:month-index`;
+    const monthStorageKey = (month) => `${APP_NAMESPACE}:${month}`;
+
+    function createDefaultMonthData(month) {
+      const categories = [...DEFAULT_EXPENSE_CATEGORIES, ...DEFAULT_INCOME_CATEGORIES];
+      const budgets = {};
+      categories.filter((c) => c.type === "expense").forEach((c) => {
+        budgets[c.id] = 0;
+      });
+      return {
+        version: 3,
+        month,
+        asset: 0,
+        categories,
+        budgets,
+        entries: []
+      };
+    }
+
+    function normalizeMonthData(month, raw) {
+      const base = createDefaultMonthData(month);
+      if (!raw || typeof raw !== "object") return base;
+
+      const categories = Array.isArray(raw.categories)
+        ? raw.categories
+            .filter((c) => c && c.id && c.name && (c.type === "expense" || c.type === "income"))
+            .map((c, idx) => ({
+              id: String(c.id),
+              name: String(c.name).trim(),
+              type: c.type,
+              color: /^#([A-Fa-f0-9]{6})$/.test(c.color || "") ? c.color : COLOR_POOL[idx % COLOR_POOL.length]
+            }))
+            .filter((c) => c.name.length > 0)
+        : base.categories;
+
+      const categoryMap = Object.fromEntries(categories.map((c) => [c.id, c]));
+      const budgets = {};
+      categories.filter((c) => c.type === "expense").forEach((c) => {
+        const n = Math.floor(Number(raw.budgets?.[c.id]) || 0);
+        budgets[c.id] = n > 0 ? n : 0;
+      });
+
+      const entries = Array.isArray(raw.entries)
+        ? raw.entries
+            .filter((e) => e && (e.type === "expense" || e.type === "income"))
+            .map((e) => {
+              const date = String(e.date || "").slice(0, 10);
+              const entryMonth = date.slice(0, 7);
+              if (!isMonth(entryMonth) || entryMonth !== month) return null;
+              const type = e.type;
+              let categoryId = String(e.categoryId || "");
+              if (!categoryMap[categoryId] || categoryMap[categoryId].type !== type) {
+                const fallback = categories.find((c) => c.type === type && c.name === "기타") || categories.find((c) => c.type === type);
+                categoryId = fallback?.id || "";
+              }
+              const amount = Math.floor(Number(e.amount) || 0);
+              if (!categoryId || amount <= 0) return null;
+              return {
+                id: String(e.id || uid()),
+                type,
+                categoryId,
+                amount,
+                date,
+                memo: String(e.memo || "")
+              };
+            })
+            .filter(Boolean)
+        : [];
+
+      return {
+        version: 3,
+        month,
+        asset: Math.max(0, Math.floor(Number(raw.asset) || 0)),
+        categories,
+        budgets,
+        entries
+      };
+    }
+
+    function readMonthIndex() {
       try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) {
-          return {
-            transactions: [],
-            monthlyBudget: 300000,
-            theme: 'light',
-            customCategories: { expense: [], income: [] },
-          };
-        }
-        const p = JSON.parse(raw);
-        return {
-          transactions: Array.isArray(p.transactions) ? p.transactions : [],
-          monthlyBudget: typeof p.monthlyBudget === 'number' ? p.monthlyBudget : 300000,
-          theme: p.theme === 'dark' ? 'dark' : 'light',
-          customCategories: {
-            expense: Array.isArray(p.customCategories?.expense) ? p.customCategories.expense : [],
-            income: Array.isArray(p.customCategories?.income) ? p.customCategories.income : [],
-          },
-        };
+        const raw = JSON.parse(localStorage.getItem(MONTH_INDEX_KEY) || "[]");
+        return Array.isArray(raw) ? raw.filter((m) => isMonth(m)).sort() : [];
       } catch {
-        return {
-          transactions: [],
-          monthlyBudget: 300000,
-          theme: 'light',
-          customCategories: { expense: [], income: [] },
-        };
+        return [];
       }
     }
 
-    function saveState(transactions, monthlyBudget, theme, customCategories) {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ transactions, monthlyBudget, theme, customCategories })
-      );
+    function updateMonthIndex(month) {
+      if (!isMonth(month)) return;
+      const index = readMonthIndex();
+      if (index.includes(month)) return;
+      localStorage.setItem(MONTH_INDEX_KEY, JSON.stringify([...index, month].sort()));
     }
 
-    function formatKRW(n) {
-      return new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW', maximumFractionDigits: 0 }).format(n || 0);
-    }
-
-    function sameMonth(d, ref) {
-      return d.getFullYear() === ref.getFullYear() && d.getMonth() === ref.getMonth();
-    }
-
-    function startOfWeekMonday(d) {
-      const x = new Date(d);
-      const day = x.getDay();
-      const diff = day === 0 ? -6 : 1 - day;
-      x.setDate(x.getDate() + diff);
-      x.setHours(0, 0, 0, 0);
-      return x;
-    }
-
-    function dateString(d) {
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    }
-
-    function id() {
-      return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-    }
-
-    function BudgetFeedback({ budget, spent, isDark }) {
-      if (budget <= 0) {
-        return (
-          <div className={`rounded-2xl px-4 py-3 text-sm border ${isDark ? 'bg-amber-900/30 border-amber-800 text-amber-100' : 'bg-amber-50 border-amber-100 text-amber-900'}`}>
-            이번 달 예산을 설정하면 소진율에 맞춰 응원 메시지를 드릴게요.
-          </div>
-        );
+    function loadMonthData(month) {
+      if (!isMonth(month)) return createDefaultMonthData(nowMonth());
+      try {
+        const raw = localStorage.getItem(monthStorageKey(month));
+        return normalizeMonthData(month, raw ? JSON.parse(raw) : null);
+      } catch {
+        return createDefaultMonthData(month);
       }
-      const ratio = spent / budget;
-      let tone = 'good';
-      let title = '잘 관리하고 있어요!';
-      let msg = '예산 안에서 균형 있게 쓰고 있어요. 오늘도 스마트한 소비!';
-      if (ratio >= 1) {
-        tone = 'bad';
-        title = '예산을 넘겼어요';
-        msg = '이번 달 지출이 예산을 초과했어요. 남은 기간은 필수 지출 위주로 조정해 보세요.';
-      } else if (ratio >= 0.9) {
-        tone = 'warn';
-        title = '주의가 필요해요';
-        msg = '예산의 90%에 가까워요. 큰 지출 전에 한 번 더 생각해 보는 건 어떨까요?';
-      } else if (ratio >= 0.7) {
-        tone = 'mid';
-        title = '조금 여유가 줄었어요';
-        msg = '절반 이상 사용했어요. 카테고리별로 남은 한도를 확인해 보세요.';
-      }
-      const pct = Math.min(100, Math.round(ratio * 100));
-      const barColor = tone === 'bad' ? 'bg-toss-warn' : tone === 'warn' ? 'bg-amber-400' : tone === 'mid' ? 'bg-toss-blue' : 'bg-emerald-400';
-      const toneClass = isDark
-        ? 'bg-slate-800 border-slate-700 text-slate-100'
-        : tone === 'bad'
-        ? 'bg-red-50 border-red-100 text-red-900'
-        : tone === 'warn'
-        ? 'bg-orange-50 border-orange-100 text-orange-900'
-        : tone === 'mid'
-        ? 'bg-toss-sky border-blue-100 text-slate-800'
-        : 'bg-emerald-50 border-emerald-100 text-emerald-900';
-      return (
-        <div className={`rounded-2xl px-4 py-3 text-sm border ${toneClass}`}>
-          <div className="flex justify-between items-baseline mb-2">
-            <span className="font-semibold">{title}</span>
-            <span className="text-xs opacity-80">{pct}% 사용</span>
-          </div>
-          <div className={`h-2 rounded-full overflow-hidden mb-2 ${isDark ? 'bg-slate-700' : 'bg-white/60'}`}>
-            <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
-          </div>
-          <p className="opacity-90 leading-relaxed">{msg}</p>
-        </div>
-      );
     }
 
-    function DetailModal({ tx, onClose, onDelete, onUpdate, customCategories, isDark }) {
-      const safeTx = tx || { id: '', type: 'expense', amount: 0, category: '기타', date: new Date().toISOString().slice(0, 10), memo: '' };
-      const categories = safeTx.type === 'expense'
-        ? [...EXPENSE_CATS, ...(customCategories.expense || [])]
-        : [...INCOME_CATS, ...(customCategories.income || [])];
-      const [editMode, setEditMode] = useState(false);
-      const [amount, setAmount] = useState(String(safeTx.amount || ''));
-      const [category, setCategory] = useState(safeTx.category || categories[0] || '기타');
-      const [date, setDate] = useState(safeTx.date || new Date().toISOString().slice(0, 10));
-      const [memo, setMemo] = useState(safeTx.memo || '');
-
-      useEffect(() => {
-        setEditMode(false);
-        setAmount(String(safeTx.amount || ''));
-        setCategory(safeTx.category || categories[0] || '기타');
-        setDate(safeTx.date || new Date().toISOString().slice(0, 10));
-        setMemo(safeTx.memo || '');
-      }, [tx?.id]);
-
-      if (!tx) return null;
-
-      const saveEdit = () => {
-        const n = Number(String(amount).replace(/[^\d]/g, ''));
-        if (!n || n <= 0) return;
-        onUpdate(tx.id, {
-          amount: n,
-          category: category || '기타',
-          date,
-          memo: memo.trim(),
-        });
-        setEditMode(false);
-      };
-
-      const inputClass = `w-full rounded-xl border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-toss-blue/30 ${
-        isDark ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
-      }`;
-      return (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/45 p-4" onClick={onClose}>
-          <div onClick={(e) => e.stopPropagation()} className={`w-full max-w-md rounded-2xl border p-5 ${isDark ? 'bg-slate-900 border-slate-700 text-slate-100' : 'bg-white border-slate-100 text-slate-900'}`}>
-            <h3 className="text-lg font-bold mb-4">기록 상세</h3>
-            {editMode ? (
-              <div className="space-y-3 text-sm">
-                <p><span className="text-slate-400">구분:</span> {tx.type === 'expense' ? '지출' : '수입'}</p>
-                <div>
-                  <label className="text-xs text-slate-400 mb-1 block">금액</label>
-                  <input type="text" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ''))} className={inputClass} />
-                </div>
-                <div>
-                  <label className="text-xs text-slate-400 mb-1 block">카테고리</label>
-                  <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputClass}>
-                    {categories.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs text-slate-400 mb-1 block">날짜</label>
-                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputClass} />
-                </div>
-                <div>
-                  <label className="text-xs text-slate-400 mb-1 block">메모</label>
-                  <input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} className={inputClass} />
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-2 text-sm">
-                <p><span className="text-slate-400">구분:</span> {tx.type === 'expense' ? '지출' : '수입'}</p>
-                <p><span className="text-slate-400">금액:</span> {formatKRW(tx.amount)}</p>
-                <p><span className="text-slate-400">카테고리:</span> {tx.category}</p>
-                <p><span className="text-slate-400">날짜:</span> {tx.date}</p>
-                <p><span className="text-slate-400">메모:</span> {tx.memo || '입력 없음'}</p>
-              </div>
-            )}
-            <div className="mt-5 flex gap-2">
-              {editMode ? (
-                <button type="button" onClick={saveEdit} className="flex-1 py-2.5 rounded-xl bg-toss-blue text-white text-sm font-semibold">저장</button>
-              ) : (
-                <button type="button" onClick={() => setEditMode(true)} className="flex-1 py-2.5 rounded-xl bg-toss-blue text-white text-sm font-semibold">수정</button>
-              )}
-              <button type="button" onClick={() => { onDelete(tx.id); onClose(); }} className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold">삭제</button>
-              <button type="button" onClick={onClose} className={`flex-1 py-2.5 rounded-xl text-sm font-semibold ${isDark ? 'bg-slate-800 text-slate-100' : 'bg-slate-100 text-slate-700'}`}>닫기</button>
-            </div>
-          </div>
-        </div>
-      );
+    function saveMonthData(month, data) {
+      const normalized = normalizeMonthData(month, data);
+      localStorage.setItem(monthStorageKey(month), JSON.stringify(normalized));
+      updateMonthIndex(month);
     }
 
-    function TransactionForm({ onAdd, customCategories, onAddCustomCategory, isDark }) {
-      const [type, setType] = useState('expense');
-      const [amount, setAmount] = useState('');
-      const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
-      const [memo, setMemo] = useState('');
-      const [newCategory, setNewCategory] = useState('');
-      const categories = useMemo(() => {
-        const base = type === 'expense' ? EXPENSE_CATS : INCOME_CATS;
-        const custom = customCategories[type] || [];
-        return [...base, ...custom];
-      }, [type, customCategories]);
-      const [category, setCategory] = useState(categories[0] || '기타');
-
-      useEffect(() => {
-        setCategory(categories[0] || '기타');
-      }, [type]);
-
-      const submit = (e) => {
-        e.preventDefault();
-        const n = Number(String(amount).replace(/,/g, ''));
-        if (!n || n <= 0) return;
-        onAdd({ id: id(), type, amount: n, category, date, memo: memo.trim() });
-        setAmount('');
-        setMemo('');
-      };
-
-      const addCategory = () => {
-        const name = newCategory.trim();
-        if (!name) return;
-        onAddCustomCategory(type, name);
-        setCategory(name);
-        setNewCategory('');
-      };
-
-      const inputClass = `w-full rounded-xl border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-toss-blue/30 ${isDark ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-900'}`;
-
-      return (
-        <form onSubmit={submit} className={`rounded-2xl shadow-sm border p-4 space-y-3 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100'}`}>
-          <div className="flex gap-2">
-            <button type="button" onClick={() => setType('expense')} className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition ${type === 'expense' ? 'bg-toss-blue text-white' : isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>지출</button>
-            <button type="button" onClick={() => setType('income')} className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition ${type === 'income' ? 'bg-emerald-500 text-white' : isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}>수입</button>
-          </div>
-          <div>
-            <label className={`text-xs mb-1 block ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>금액</label>
-            <input type="text" inputMode="numeric" placeholder="0" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ''))} className={`${inputClass} text-lg font-semibold`} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={`text-xs mb-1 block ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>카테고리</label>
-              <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputClass}>
-                {categories.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className={`text-xs mb-1 block ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>날짜</label>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputClass} />
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <input type="text" placeholder="새 카테고리 입력" value={newCategory} onChange={(e) => setNewCategory(e.target.value)} className={inputClass} />
-            <button type="button" onClick={addCategory} className={`px-4 rounded-xl text-sm font-semibold ${isDark ? 'bg-slate-700 text-slate-100' : 'bg-slate-100 text-slate-700'}`}>추가</button>
-          </div>
-          <div>
-            <label className={`text-xs mb-1 block ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>메모</label>
-            <input type="text" placeholder="상세 내용 (선택)" value={memo} onChange={(e) => setMemo(e.target.value)} className={inputClass} />
-          </div>
-          <button type="submit" className="w-full py-3 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition">기록 추가</button>
-        </form>
-      );
-    }
-
-    function CalendarView({ transactions, cursorMonth, setCursorMonth, onOpenDetail, isDark }) {
-      const [viewMode, setViewMode] = useState('month');
-      const [focusDate, setFocusDate] = useState(() => dateString(new Date()));
-      const year = cursorMonth.getFullYear();
-      const month = cursorMonth.getMonth();
-      const first = new Date(year, month, 1);
-      const last = new Date(year, month + 1, 0);
-      const startPad = first.getDay() === 0 ? 6 : first.getDay() - 1;
-      const daysInMonth = last.getDate();
-      const byDay = useMemo(() => {
-        const m = {};
-        transactions.forEach((t) => {
-          const key = t.date;
-          if (!m[key]) m[key] = { income: 0, expense: 0, list: [] };
-          if (t.type === 'income') m[key].income += t.amount;
-          else m[key].expense += t.amount;
-          m[key].list.push(t);
-        });
-        return m;
-      }, [transactions]);
-
-      const weekDays = ['월', '화', '수', '목', '금', '토', '일'];
-      const surface = isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-100 text-slate-900';
-
-      const renderMonth = () => {
-        const cells = [];
-        for (let i = 0; i < startPad; i++) cells.push({ key: `p-${i}`, empty: true });
-        for (let d = 1; d <= daysInMonth; d++) {
-          const ds = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-          const data = byDay[ds] || { income: 0, expense: 0, list: [] };
-          cells.push({ key: ds, day: d, dateStr: ds, ...data });
+    function migrateLegacyIfNeeded() {
+      const doneKey = `${APP_NAMESPACE}:legacy-migrated`;
+      if (localStorage.getItem(doneKey) === "1") return;
+      try {
+        const raw = localStorage.getItem(LEGACY_KEY);
+        if (!raw) {
+          localStorage.setItem(doneKey, "1");
+          return;
         }
-        return (
-          <div className={`rounded-2xl border p-3 overflow-x-auto ${surface}`}>
-            <div className="grid grid-cols-7 gap-1 min-w-[280px]">
-              {weekDays.map((w) => <div key={w} className={`text-center text-xs py-1 font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{w}</div>)}
-              {cells.map((c) => c.empty ? (
-                <div key={c.key} className={`aspect-square rounded-lg ${isDark ? 'bg-slate-800/70' : 'bg-slate-50/60'}`} />
-              ) : (
-                <button key={c.key} type="button" onClick={() => { setFocusDate(c.dateStr); if (c.list.length) onOpenDetail(c.list[0]); }} className={`text-left aspect-square rounded-xl border p-1 flex flex-col justify-between min-h-[72px] transition ${isDark ? 'border-slate-700 bg-slate-800 hover:bg-slate-700' : 'border-slate-100 bg-slate-50/30 hover:bg-toss-sky/40'}`}>
-                  <span className={`text-xs font-semibold ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>{c.day}</span>
-                  {c.expense > 0 && <span className="text-[10px] leading-tight text-toss-warn font-medium truncate text-center">-{formatKRW(c.expense).replace(/\s/g, '')}</span>}
-                  {c.income > 0 && <span className="text-[10px] leading-tight text-emerald-500 font-medium truncate text-center">+{formatKRW(c.income).replace(/\s/g, '')}</span>}
-                </button>
-              ))}
-            </div>
-          </div>
-        );
-      };
+        const legacy = JSON.parse(raw);
+        const txs = Array.isArray(legacy.transactions) ? legacy.transactions : [];
+        const bucket = {};
 
-      const renderWeek = () => {
-        const base = new Date(focusDate + 'T12:00:00');
-        const start = startOfWeekMonday(base);
-        const days = Array.from({ length: 7 }, (_, i) => {
-          const d = new Date(start);
-          d.setDate(start.getDate() + i);
-          const ds = dateString(d);
-          return { dateStr: ds, dayLabel: `${d.getMonth() + 1}/${d.getDate()}`, ...(byDay[ds] || { income: 0, expense: 0, list: [] }) };
+        txs.forEach((t) => {
+          const date = String(t?.date || "").slice(0, 10);
+          const month = date.slice(0, 7);
+          const type = t?.type === "income" ? "income" : "expense";
+          if (!isMonth(month) || !date) return;
+          if (!bucket[month]) bucket[month] = loadMonthData(month);
+          const data = bucket[month];
+
+          let category = data.categories.find((c) => c.type === type && c.name === String(t?.category || "기타"));
+          if (!category) {
+            category = {
+              id: `${type}-${uid()}`,
+              name: String(t?.category || "기타"),
+              type,
+              color: COLOR_POOL[data.categories.length % COLOR_POOL.length]
+            };
+            data.categories.push(category);
+            if (type === "expense") data.budgets[category.id] = 0;
+          }
+
+          const amount = Math.max(0, Math.floor(Number(t?.amount) || 0));
+          if (amount <= 0) return;
+          data.entries.push({
+            id: String(t?.id || uid()),
+            type,
+            categoryId: category.id,
+            amount,
+            date,
+            memo: String(t?.memo || "")
+          });
         });
-        return (
-          <div className={`rounded-2xl border p-3 ${surface}`}>
-            <div className="grid grid-cols-1 sm:grid-cols-7 gap-2">
-              {days.map((d) => (
-                <button key={d.dateStr} type="button" onClick={() => { setFocusDate(d.dateStr); if (d.list.length) onOpenDetail(d.list[0]); }} className={`rounded-xl border p-2 text-left ${isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-100 bg-slate-50/40'}`}>
-                  <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{d.dayLabel}</p>
-                  <p className="text-xs text-toss-warn">지출 {formatKRW(d.expense)}</p>
-                  <p className="text-xs text-emerald-500">수입 {formatKRW(d.income)}</p>
-                  <p className={`text-[11px] mt-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{d.list.length}건</p>
-                </button>
-              ))}
-            </div>
-          </div>
-        );
-      };
 
-      const renderDay = () => {
-        const list = (byDay[focusDate]?.list || []).slice().sort((a, b) => b.id.localeCompare(a.id));
-        return (
-          <div className={`rounded-2xl border p-4 ${surface}`}>
-            <h4 className="text-sm font-semibold mb-2">{focusDate} 상세</h4>
-            <div className="space-y-2 max-h-56 overflow-y-auto">
-              {list.length === 0 ? <p className={`${isDark ? 'text-slate-500' : 'text-slate-400'} text-sm`}>기록이 없습니다.</p> : list.map((t) => (
-                <button key={t.id} type="button" onClick={() => onOpenDetail(t)} className={`w-full rounded-xl border px-3 py-2 text-left ${isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-100 bg-slate-50/50'}`}>
-                  <div className="flex justify-between text-sm">
-                    <span>{t.category}</span>
-                    <span className="font-semibold">{t.type === 'expense' ? '-' : '+'}{formatKRW(t.amount)}</span>
-                  </div>
-                  <p className={`text-xs mt-1 truncate ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t.memo || '메모 없음'}</p>
-                </button>
-              ))}
-            </div>
-          </div>
-        );
-      };
-
-      const monthList = useMemo(() => {
-        return transactions
-          .filter((t) => sameMonth(new Date(t.date + 'T12:00:00'), cursorMonth))
-          .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
-      }, [transactions, cursorMonth]);
-
-      return (
-        <div className="space-y-3">
-          <div className={`flex items-center justify-between rounded-2xl border px-3 py-2 ${surface}`}>
-            <button type="button" className={`p-2 rounded-lg ${isDark ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-slate-50 text-slate-600'}`} onClick={() => setCursorMonth(new Date(year, month - 1, 1))}>‹</button>
-            <span className="font-semibold">{year}년 {month + 1}월</span>
-            <button type="button" className={`p-2 rounded-lg ${isDark ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-slate-50 text-slate-600'}`} onClick={() => setCursorMonth(new Date(year, month + 1, 1))}>›</button>
-          </div>
-          <div className={`rounded-2xl border p-1 flex ${surface}`}>
-            {['day', 'week', 'month'].map((mode) => (
-              <button key={mode} type="button" onClick={() => setViewMode(mode)} className={`flex-1 py-2 rounded-xl text-sm font-semibold ${viewMode === mode ? 'bg-toss-blue text-white' : isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-                {mode === 'day' ? '일간' : mode === 'week' ? '주간' : '월간'}
-              </button>
-            ))}
-          </div>
-
-          {viewMode === 'month' && renderMonth()}
-          {viewMode === 'week' && renderWeek()}
-          {viewMode === 'day' && renderDay()}
-
-          <div className={`rounded-2xl border p-4 ${surface}`}>
-            <h3 className="text-sm font-semibold mb-3">이번 달 내역 (클릭 시 상세)</h3>
-            <div className="space-y-2 max-h-52 overflow-y-auto">
-              {monthList.length === 0 ? (
-                <p className={`text-sm ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>이 달 기록이 없습니다.</p>
-              ) : monthList.map((t) => (
-                <button key={t.id} type="button" onClick={() => onOpenDetail(t)} className={`w-full rounded-xl border px-3 py-2 text-left ${isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-100 bg-slate-50/50'}`}>
-                  <div className="flex justify-between items-center text-sm gap-2">
-                    <span className="truncate">
-                      <span className={t.type === 'expense' ? 'text-toss-warn' : 'text-emerald-500'}>{t.type === 'expense' ? '지출' : '수입'}</span> {t.category}
-                    </span>
-                    <span className="font-semibold shrink-0">{t.type === 'expense' ? '-' : '+'}{formatKRW(t.amount)}</span>
-                  </div>
-                  <p className={`text-xs mt-1 truncate ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{t.date} · {t.memo || '메모 없음'}</p>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      );
+        Object.keys(bucket).forEach((m) => saveMonthData(m, bucket[m]));
+      } catch {
+      } finally {
+        localStorage.setItem(doneKey, "1");
+      }
     }
 
-    function ChartTab({ transactions, cursorMonth, setCursorMonth, isDark }) {
-      const pieRef = useRef(null);
-      const lineRef = useRef(null);
-      const pieChart = useRef(null);
-      const lineChart = useRef(null);
-      const y = cursorMonth.getFullYear();
-      const m = cursorMonth.getMonth();
+    function buildCalendarCells(month) {
+      const [y, m] = month.split("-").map(Number);
+      const first = new Date(y, m - 1, 1);
+      const lastDate = new Date(y, m, 0).getDate();
+      const leading = (first.getDay() + 6) % 7;
+      const cells = [];
+      for (let i = 0; i < leading; i++) cells.push(null);
+      for (let d = 1; d <= lastDate; d++) cells.push(`${y}-${pad(m)}-${pad(d)}`);
+      return cells;
+    }
 
-      const pieData = useMemo(() => {
-        const catSum = {};
-        transactions.forEach((t) => {
-          if (t.type !== 'expense') return;
-          const d = new Date(t.date + 'T12:00:00');
-          if (!sameMonth(d, cursorMonth)) return;
-          catSum[t.category] = (catSum[t.category] || 0) + t.amount;
-        });
-        const labels = Object.keys(catSum).filter((k) => catSum[k] > 0);
-        const data = labels.map((k) => catSum[k]);
-        return { labels, data, total: data.reduce((a, b) => a + b, 0) };
-      }, [transactions, cursorMonth]);
-
-      const weekSeries = useMemo(() => {
-        const now = new Date();
-        const start = startOfWeekMonday(now);
-        const days = [];
-        for (let i = 0; i < 7; i++) {
-          const dt = new Date(start);
-          dt.setDate(start.getDate() + i);
-          const ds = dateString(dt);
-          days.push({ label: `${dt.getMonth() + 1}/${dt.getDate()}`, dateStr: ds, expense: 0 });
-        }
-        transactions.forEach((t) => {
-          if (t.type !== 'expense') return;
-          const hit = days.find((x) => x.dateStr === t.date);
-          if (hit) hit.expense += t.amount;
-        });
-        let cumulative = 0;
-        const acc = days.map((d) => (cumulative += d.expense));
-        return { labels: days.map((d) => d.label), daily: days.map((d) => d.expense), cumulative: acc };
-      }, [transactions]);
-
-      useEffect(() => {
-        if (!pieRef.current) return;
-        if (pieChart.current) pieChart.current.destroy();
-        const ctx = pieRef.current.getContext('2d');
-        pieChart.current = new Chart(ctx, {
-          type: 'doughnut',
-          data: {
-            labels: pieData.labels.length ? pieData.labels : ['데이터 없음'],
-            datasets: [{ data: pieData.labels.length ? pieData.data : [1], backgroundColor: pieData.labels.length ? ['#3182F6', '#00C853', '#FFB020', '#FF6B6B', '#9C88FF', '#6B7280'] : ['#CBD5E1'], borderWidth: 0 }],
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: { position: 'bottom', labels: { color: isDark ? '#CBD5E1' : '#334155', boxWidth: 10, font: { size: 11 } } },
-              tooltip: { callbacks: { label(ctx) { return `${ctx.label}: ${formatKRW(ctx.raw || 0)}`; } } },
-            },
-            cutout: '58%',
-          },
-        });
-      }, [pieData.labels.join(','), pieData.data.join(','), isDark]);
-
-      useEffect(() => {
-        if (!lineRef.current) return;
-        if (lineChart.current) lineChart.current.destroy();
-        const ctx = lineRef.current.getContext('2d');
-        lineChart.current = new Chart(ctx, {
-          type: 'line',
-          data: {
-            labels: weekSeries.labels,
-            datasets: [
-              { label: '누적 지출', data: weekSeries.cumulative, borderColor: '#3182F6', backgroundColor: 'rgba(49,130,246,.12)', fill: true, tension: .35, pointRadius: 4 },
-              { label: '일 지출', data: weekSeries.daily, borderColor: '#FF6B6B', backgroundColor: 'transparent', tension: .25, borderDash: [4, 4], pointRadius: 2 },
-            ],
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-              y: { beginAtZero: true, grid: { color: isDark ? '#1E293B' : '#F1F5F9' }, ticks: { color: isDark ? '#CBD5E1' : '#334155', font: { size: 10 } } },
-              x: { grid: { display: false }, ticks: { color: isDark ? '#CBD5E1' : '#334155', font: { size: 10 } } },
-            },
-            plugins: { legend: { position: 'bottom', labels: { color: isDark ? '#CBD5E1' : '#334155', boxWidth: 10, font: { size: 11 } } } },
-          },
-        });
-      }, [weekSeries.labels.join(','), weekSeries.daily.join(','), weekSeries.cumulative.join(','), isDark]);
-
-      const card = isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-100 text-slate-900';
-
+    function DateDetailModal({ openDate, entries, categories, onClose, dark }) {
+      if (!openDate) return null;
+      const categoryMap = Object.fromEntries(categories.map((c) => [c.id, c]));
+      const sorted = entries.slice().sort((a, b) => a.id < b.id ? 1 : -1);
       return (
-        <div className="space-y-4">
-          <div className={`flex items-center justify-between rounded-2xl border px-3 py-2 ${card}`}>
-            <button type="button" className={`p-2 rounded-lg ${isDark ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-slate-50 text-slate-600'}`} onClick={() => setCursorMonth(new Date(y, m - 1, 1))}>‹</button>
-            <span className="font-semibold text-sm">{y}년 {m + 1}월 · 지출 분석</span>
-            <button type="button" className={`p-2 rounded-lg ${isDark ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-slate-50 text-slate-600'}`} onClick={() => setCursorMonth(new Date(y, m + 1, 1))}>›</button>
-          </div>
-          <div className={`rounded-2xl border p-4 ${card}`}>
-            <h3 className="text-sm font-semibold mb-1">이번 달 지출 비율</h3>
-            <p className={`text-xs mb-3 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>총 지출 {formatKRW(pieData.total)}</p>
-            <div className="h-64 relative"><canvas ref={pieRef} /></div>
-          </div>
-          <div className={`rounded-2xl border p-4 ${card}`}>
-            <h3 className="text-sm font-semibold mb-1">이번 주 지출 흐름</h3>
-            <p className={`text-xs mb-3 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>실선은 누적 지출, 점선은 일별 지출입니다.</p>
-            <div className="h-56 relative"><canvas ref={lineRef} /></div>
+        <div className="fixed inset-0 z-50 bg-black/50 p-4 flex items-end sm:items-center justify-center" onClick={onClose}>
+          <div className={`w-full max-w-xl rounded-2xl border p-5 ${dark ? "bg-slate-900 border-slate-700 text-slate-100" : "bg-white border-slate-100 text-slate-900"}`} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold">{openDate} 상세 내역</h3>
+              <button onClick={onClose} className={`px-3 py-1 text-sm rounded-lg ${dark ? "bg-slate-800" : "bg-slate-100"}`}>닫기</button>
+            </div>
+            <div className="space-y-2 max-h-[70vh] overflow-y-auto">
+              {sorted.length === 0 ? (
+                <p className={`text-sm ${dark ? "text-slate-400" : "text-slate-500"}`}>선택한 날짜의 기록이 없습니다.</p>
+              ) : sorted.map((e) => {
+                const cat = categoryMap[e.categoryId];
+                return (
+                  <div key={e.id} className={`rounded-xl border p-3 ${dark ? "border-slate-700 bg-slate-800" : "border-slate-100 bg-slate-50/80"}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: cat?.color || "#94A3B8" }} />
+                        <strong>{cat?.name || "알 수 없는 카테고리"}</strong>
+                        <span className={`text-[11px] px-2 py-0.5 rounded ${e.type === "expense" ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}>
+                          {e.type === "expense" ? "지출" : "수입"}
+                        </span>
+                      </div>
+                      <strong>{e.type === "expense" ? "-" : "+"}{formatKRW(e.amount)}</strong>
+                    </div>
+                    <p className={`mt-2 text-xs ${dark ? "text-slate-400" : "text-slate-500"}`}>{e.memo || "메모 없음"}</p>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       );
     }
 
     function App() {
-      const init = loadState();
-      const [transactions, setTransactions] = useState(init.transactions);
-      const [monthlyBudget, setMonthlyBudget] = useState(init.monthlyBudget);
-      const [theme, setTheme] = useState(init.theme);
-      const [customCategories, setCustomCategories] = useState(init.customCategories);
-      const [tab, setTab] = useState('calendar');
-      const [cursorMonth, setCursorMonth] = useState(() => new Date());
-      const [detailTarget, setDetailTarget] = useState(null);
-      const isDark = theme === 'dark';
+      migrateLegacyIfNeeded();
+      const currentMonth = nowMonth();
+      const [cursorMonth, setCursorMonth] = useState(currentMonth);
+      const [monthData, setMonthData] = useState(() => loadMonthData(currentMonth));
+      const [theme, setTheme] = useState("light");
+      const [entryType, setEntryType] = useState("expense");
+      const [selectedCategoryId, setSelectedCategoryId] = useState("");
+      const [amount, setAmount] = useState("");
+      const [entryDate, setEntryDate] = useState(`${currentMonth}-01`);
+      const [memo, setMemo] = useState("");
+      const [newCategoryName, setNewCategoryName] = useState("");
+      const [newCategoryType, setNewCategoryType] = useState("expense");
+      const [newCategoryColor, setNewCategoryColor] = useState("#3B82F6");
+      const [openDate, setOpenDate] = useState(null);
+      const [navDirection, setNavDirection] = useState("init");
+
+      const dark = theme === "dark";
 
       useEffect(() => {
-        saveState(transactions, monthlyBudget, theme, customCategories);
-      }, [transactions, monthlyBudget, theme, customCategories]);
+        document.documentElement.classList.toggle("dark", dark);
+        document.body.classList.toggle("dark", dark);
+      }, [dark]);
 
       useEffect(() => {
-        document.documentElement.classList.toggle('dark', isDark);
-        document.body.classList.toggle('dark', isDark);
-      }, [isDark]);
+        const loaded = loadMonthData(cursorMonth);
+        setMonthData(loaded);
+        setEntryDate(`${cursorMonth}-01`);
+        setOpenDate(null);
+      }, [cursorMonth]);
 
-      const now = new Date();
-      const monthExpense = useMemo(() => transactions.reduce((sum, t) => t.type === 'expense' && sameMonth(new Date(t.date + 'T12:00:00'), now) ? sum + t.amount : sum, 0), [transactions, now.getMonth(), now.getFullYear()]);
-      const monthIncome = useMemo(() => transactions.reduce((sum, t) => t.type === 'income' && sameMonth(new Date(t.date + 'T12:00:00'), now) ? sum + t.amount : sum, 0), [transactions, now.getMonth(), now.getFullYear()]);
+      useEffect(() => {
+        saveMonthData(cursorMonth, monthData);
+      }, [cursorMonth, monthData]);
 
-      const addTx = useCallback((t) => setTransactions((prev) => [t, ...prev]), []);
-      const deleteTx = useCallback((tid) => setTransactions((prev) => prev.filter((x) => x.id !== tid)), []);
-      const updateTx = useCallback((tid, patch) => {
-        setTransactions((prev) => prev.map((x) => (x.id === tid ? { ...x, ...patch } : x)));
-        setDetailTarget((prev) => (prev && prev.id === tid ? { ...prev, ...patch } : prev));
-      }, []);
+      const categoryMap = useMemo(
+        () => Object.fromEntries(monthData.categories.map((c) => [c.id, c])),
+        [monthData.categories]
+      );
+      const categoriesByType = useMemo(
+        () => ({
+          expense: monthData.categories.filter((c) => c.type === "expense"),
+          income: monthData.categories.filter((c) => c.type === "income")
+        }),
+        [monthData.categories]
+      );
 
-      const addCustomCategory = useCallback((type, value) => {
-        setCustomCategories((prev) => {
-          const base = type === 'expense' ? EXPENSE_CATS : INCOME_CATS;
-          const has = base.includes(value) || (prev[type] || []).includes(value);
-          if (has) return prev;
-          return { ...prev, [type]: [...(prev[type] || []), value] };
+      useEffect(() => {
+        const list = categoriesByType[entryType];
+        if (!list.length) {
+          setSelectedCategoryId("");
+          return;
+        }
+        if (!list.find((cat) => cat.id === selectedCategoryId)) {
+          setSelectedCategoryId(list[0].id);
+        }
+      }, [entryType, categoriesByType, selectedCategoryId]);
+
+      const entriesByDate = useMemo(() => {
+        const map = {};
+        monthData.entries.forEach((e) => {
+          if (!map[e.date]) map[e.date] = [];
+          map[e.date].push(e);
         });
-      }, []);
+        return map;
+      }, [monthData.entries]);
 
-      const shell = isDark ? 'bg-slate-950 text-slate-100' : 'bg-transparent text-slate-900';
-      const card = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-100';
-      const muted = isDark ? 'text-slate-400' : 'text-slate-500';
+      const monthIncome = useMemo(
+        () => monthData.entries.filter((e) => e.type === "income").reduce((sum, e) => sum + e.amount, 0),
+        [monthData.entries]
+      );
+      const monthExpense = useMemo(
+        () => monthData.entries.filter((e) => e.type === "expense").reduce((sum, e) => sum + e.amount, 0),
+        [monthData.entries]
+      );
+      const expenseByCategory = useMemo(() => {
+        const map = {};
+        monthData.entries.forEach((e) => {
+          if (e.type !== "expense") return;
+          map[e.categoryId] = (map[e.categoryId] || 0) + e.amount;
+        });
+        return map;
+      }, [monthData.entries]);
+
+      const budgetReportRows = categoriesByType.expense.map((cat) => {
+        const budget = monthData.budgets[cat.id] || 0;
+        const spent = expenseByCategory[cat.id] || 0;
+        return { ...cat, budget, spent, status: spent <= budget ? "성공" : "초과" };
+      });
+      const showPastMonthReport = navDirection === "prev" && monthCompare(cursorMonth, currentMonth) < 0;
+
+      const addEntry = (ev) => {
+        ev.preventDefault();
+        const n = Number(String(amount).replace(/[^\d]/g, ""));
+        if (!n || !selectedCategoryId) return;
+        if (!entryDate.startsWith(cursorMonth)) return;
+        setMonthData((prev) => ({
+          ...prev,
+          entries: [{ id: uid(), type: entryType, categoryId: selectedCategoryId, amount: n, date: entryDate, memo: memo.trim() }, ...prev.entries]
+        }));
+        setAmount("");
+        setMemo("");
+      };
+
+      const addQuickAmount = (plus) => {
+        const base = Number(String(amount).replace(/[^\d]/g, "")) || 0;
+        setAmount(String(base + plus));
+      };
+
+      const addCategory = () => {
+        const cleanName = newCategoryName.trim();
+        if (!cleanName) return;
+        const duplicated = monthData.categories.some((c) => c.type === newCategoryType && c.name === cleanName);
+        if (duplicated) return;
+        const nextCat = { id: `${newCategoryType}-${uid()}`, name: cleanName, type: newCategoryType, color: newCategoryColor };
+        setMonthData((prev) => {
+          const next = {
+            ...prev,
+            categories: [...prev.categories, nextCat],
+            budgets: { ...prev.budgets }
+          };
+          if (nextCat.type === "expense") next.budgets[nextCat.id] = 0;
+          return next;
+        });
+        setNewCategoryName("");
+        if (newCategoryType === entryType) setSelectedCategoryId(nextCat.id);
+      };
+
+      const deleteCategory = (catId) => {
+        const target = monthData.categories.find((c) => c.id === catId);
+        if (!target) return;
+        const sameType = monthData.categories.filter((c) => c.type === target.type);
+        if (sameType.length <= 1) return;
+        const fallback = sameType.find((c) => c.id !== catId);
+        setMonthData((prev) => {
+          const nextEntries = prev.entries.map((e) => (e.categoryId === catId ? { ...e, categoryId: fallback.id } : e));
+          const nextCategories = prev.categories.filter((c) => c.id !== catId);
+          const nextBudgets = { ...prev.budgets };
+          delete nextBudgets[catId];
+          return { ...prev, categories: nextCategories, budgets: nextBudgets, entries: nextEntries };
+        });
+      };
+
+      const updateCategoryColor = (catId, color) => {
+        setMonthData((prev) => ({
+          ...prev,
+          categories: prev.categories.map((c) => (c.id === catId ? { ...c, color } : c))
+        }));
+      };
+
+      const updateBudget = (catId, value) => {
+        const n = Math.max(0, Math.floor(Number(value) || 0));
+        setMonthData((prev) => ({
+          ...prev,
+          budgets: { ...prev.budgets, [catId]: n }
+        }));
+      };
+
+      const card = dark ? "bg-slate-900 border-slate-800 text-slate-100" : "bg-white border-slate-100 text-slate-900";
+      const input = dark ? "bg-slate-800 border-slate-700 text-slate-100" : "bg-white border-slate-200 text-slate-900";
+      const subtle = dark ? "text-slate-400" : "text-slate-500";
 
       return (
-        <div className={`${shell} min-h-screen pb-10 transition-colors`}>
-          <div className="max-w-lg mx-auto px-4 pt-6">
-            <header className="mb-5 flex items-start justify-between gap-3">
+        <div className={`${dark ? "bg-slate-950 text-slate-100" : "text-slate-900"} min-h-screen pb-10`}>
+          <div className="max-w-7xl mx-auto px-4 py-6">
+            <header className="mb-5 flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs text-toss-blue font-medium mb-1">Pocket Money</p>
-                <h1 className="text-2xl font-bold tracking-tight">용돈 관리</h1>
-                <p className={`text-sm mt-1 ${muted}`}>한 달 예산과 기록을 한곳에서 관리해요.</p>
+                <h1 className="text-2xl sm:text-3xl font-bold">용돈 관리 앱</h1>
+                <p className={`text-sm mt-1 ${subtle}`}>월별(YYYY-MM) 로컬 저장 / 카테고리 컬러 / 예산 리포트 / 확장 캘린더</p>
               </div>
-              <button type="button" onClick={() => setTheme(isDark ? 'light' : 'dark')} className={`shrink-0 px-3 py-2 rounded-xl text-xs font-semibold border ${isDark ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-700'}`}>
-                {isDark ? '라이트 모드' : '다크 모드'}
+              <button onClick={() => setTheme(dark ? "light" : "dark")} className={`rounded-xl px-3 py-2 text-sm border ${card}`}>
+                {dark ? "라이트 모드" : "다크 모드"}
               </button>
             </header>
 
-            <div className={`rounded-2xl border p-4 mb-4 shadow-sm ${card}`}>
-              <div className="mb-3">
-                <p className={`text-xs ${muted}`}>이번 달 순자산 변화</p>
-                <p className="text-lg font-bold">{formatKRW(monthIncome - monthExpense)}</p>
-                <p className={`text-xs mt-0.5 ${muted}`}>수입 {formatKRW(monthIncome)} · 지출 {formatKRW(monthExpense)}</p>
-              </div>
-              <label className={`text-xs block mb-1 ${muted}`}>한 달 예산 (원)</label>
-              <input type="number" min="0" step="10000" value={monthlyBudget || ''} onChange={(e) => setMonthlyBudget(Number(e.target.value) || 0)} className={`w-full rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-toss-blue/30 ${isDark ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-900'}`} />
-              <div className="mt-3"><BudgetFeedback budget={monthlyBudget} spent={monthExpense} isDark={isDark} /></div>
+            <section className={`rounded-2xl border p-3 sm:p-4 mb-4 flex items-center justify-between ${card}`}>
+              <button onClick={() => { setCursorMonth(shiftMonth(cursorMonth, -1)); setNavDirection("prev"); }} className="px-3 py-2 rounded-lg bg-brand-blue text-white text-sm font-semibold">이전 달</button>
+              <strong className="text-base sm:text-xl">{monthToLabel(cursorMonth)}</strong>
+              <button onClick={() => { setCursorMonth(shiftMonth(cursorMonth, 1)); setNavDirection("next"); }} className="px-3 py-2 rounded-lg bg-brand-blue text-white text-sm font-semibold">다음 달</button>
+            </section>
+
+            <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
+              <section className="xl:col-span-2 space-y-4">
+                <div className={`rounded-2xl border p-4 ${card}`}>
+                  <h2 className="font-semibold mb-3">자산 및 카테고리 예산 설정</h2>
+                  <label className={`text-xs block mb-1 ${subtle}`}>현재 보유 자산</label>
+                  <input
+                    type="number"
+                    value={monthData.asset || ""}
+                    onChange={(e) => setMonthData((prev) => ({ ...prev, asset: Math.max(0, Number(e.target.value) || 0) }))}
+                    className={`w-full rounded-xl border px-3 py-2 mb-3 ${input}`}
+                  />
+                  <div className="text-sm space-y-1 mb-4">
+                    <p>이번 달 수입: <strong className="text-emerald-500">{formatKRW(monthIncome)}</strong></p>
+                    <p>이번 달 지출: <strong className="text-red-500">{formatKRW(monthExpense)}</strong></p>
+                    <p>잔여 자산: <strong>{formatKRW(monthData.asset + monthIncome - monthExpense)}</strong></p>
+                  </div>
+                  <div className="space-y-2">
+                    {categoriesByType.expense.map((cat) => (
+                      <div key={cat.id}>
+                        <label className="text-xs mb-1 flex items-center gap-2">
+                          <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
+                          {cat.name} 예산 상한
+                        </label>
+                        <input
+                          type="number"
+                          value={monthData.budgets[cat.id] || ""}
+                          onChange={(e) => updateBudget(cat.id, e.target.value)}
+                          className={`w-full rounded-xl border px-3 py-2 ${input}`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <form onSubmit={addEntry} className={`rounded-2xl border p-4 ${card}`}>
+                  <h2 className="font-semibold mb-3">수입 / 지출 입력</h2>
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    <button type="button" onClick={() => setEntryType("expense")} className={`py-2 rounded-xl font-semibold ${entryType === "expense" ? "bg-red-500 text-white" : dark ? "bg-slate-800" : "bg-slate-100"}`}>지출</button>
+                    <button type="button" onClick={() => setEntryType("income")} className={`py-2 rounded-xl font-semibold ${entryType === "income" ? "bg-emerald-500 text-white" : dark ? "bg-slate-800" : "bg-slate-100"}`}>수입</button>
+                  </div>
+                  <label className={`text-xs block mb-1 ${subtle}`}>금액</label>
+                  <input type="text" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ""))} className={`w-full rounded-xl border px-3 py-3 text-xl font-bold ${input}`} />
+                  <div className="grid grid-cols-2 gap-3 mt-3 mb-3">
+                    {QUICK_AMOUNTS.map((v) => (
+                      <button key={v} type="button" onClick={() => addQuickAmount(v)} className="py-4 rounded-xl text-lg font-bold bg-brand-blue text-white">
+                        +{v >= 10000 ? `${v / 10000}만` : `${v / 1000}천`}
+                      </button>
+                    ))}
+                  </div>
+                  <label className={`text-xs block mb-1 ${subtle}`}>카테고리</label>
+                  <select value={selectedCategoryId} onChange={(e) => setSelectedCategoryId(e.target.value)} className={`w-full rounded-xl border px-3 py-2 mb-3 ${input}`}>
+                    {(categoriesByType[entryType] || []).map((cat) => (
+                      <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    ))}
+                  </select>
+                  <label className={`text-xs block mb-1 ${subtle}`}>날짜</label>
+                  <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} className={`w-full rounded-xl border px-3 py-2 mb-3 ${input}`} />
+                  <label className={`text-xs block mb-1 ${subtle}`}>메모</label>
+                  <input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} className={`w-full rounded-xl border px-3 py-2 mb-3 ${input}`} />
+                  <button type="submit" className="w-full py-3 rounded-xl bg-slate-900 text-white font-semibold">기록 저장</button>
+                </form>
+
+                <div className={`rounded-2xl border p-4 ${card}`}>
+                  <h2 className="font-semibold mb-3">카테고리 커스텀 설정</h2>
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <select value={newCategoryType} onChange={(e) => setNewCategoryType(e.target.value)} className={`rounded-xl border px-3 py-2 ${input}`}>
+                      <option value="expense">지출</option>
+                      <option value="income">수입</option>
+                    </select>
+                    <input type="color" value={newCategoryColor} onChange={(e) => setNewCategoryColor(e.target.value)} className="h-10 rounded-xl border px-1" />
+                  </div>
+                  <div className="flex gap-2 mb-3">
+                    <input type="text" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} placeholder="카테고리 이름 입력" className={`flex-1 rounded-xl border px-3 py-2 ${input}`} />
+                    <button type="button" onClick={addCategory} className="px-4 rounded-xl bg-brand-blue text-white font-semibold">추가</button>
+                  </div>
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {monthData.categories.map((cat) => (
+                      <div key={cat.id} className={`rounded-xl border p-2 ${dark ? "border-slate-700" : "border-slate-200"}`}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className={`text-xs px-2 py-0.5 rounded ${cat.type === "expense" ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}>
+                            {cat.type === "expense" ? "지출" : "수입"}
+                          </span>
+                          <span className="text-sm font-semibold">{cat.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input type="color" value={cat.color} onChange={(e) => updateCategoryColor(cat.id, e.target.value)} className="h-8 w-12 rounded border" />
+                          <button type="button" onClick={() => deleteCategory(cat.id)} className="ml-auto px-3 py-1 rounded-lg bg-red-500 text-white text-sm">삭제</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </section>
+
+              <section className={`xl:col-span-3 rounded-2xl border p-4 ${card}`}>
+                <h2 className="font-semibold mb-3">캘린더</h2>
+                <div className="grid grid-cols-7 gap-2 text-center text-xs font-semibold mb-2">
+                  {["월", "화", "수", "목", "금", "토", "일"].map((day) => (
+                    <div key={day} className={subtle}>{day}</div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-7 gap-2">
+                  {buildCalendarCells(cursorMonth).map((d, idx) => {
+                    if (!d) {
+                      return <div key={`blank-${idx}`} className={`min-h-[150px] rounded-xl ${dark ? "bg-slate-900/30" : "bg-slate-100/50"}`} />;
+                    }
+                    const list = entriesByDate[d] || [];
+                    const expenseCategoryDots = [...new Set(
+                      list
+                        .filter((e) => e.type === "expense")
+                        .map((e) => categoryMap[e.categoryId]?.color || "#94A3B8")
+                    )];
+                    return (
+                      <button key={d} type="button" onClick={() => setOpenDate(d)} className={`min-h-[150px] rounded-xl border p-2 text-left flex flex-col ${dark ? "border-slate-700 hover:bg-slate-800" : "border-slate-200 hover:bg-brand-sky/50"}`}>
+                        <div className="text-sm font-bold">{Number(d.slice(-2))}</div>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {expenseCategoryDots.map((color, colorIdx) => (
+                            <span key={`${d}-${colorIdx}`} className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
+                          ))}
+                        </div>
+                        <div className={`mt-auto text-[11px] ${subtle}`}>{list.length > 0 ? `${list.length}건` : ""}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
             </div>
 
-            <TransactionForm onAdd={addTx} customCategories={customCategories} onAddCustomCategory={addCustomCategory} isDark={isDark} />
+            {showPastMonthReport && (
+              <section className={`rounded-2xl border p-4 mt-4 ${card}`}>
+                <h2 className="font-semibold mb-2">{monthToLabel(cursorMonth)} 예산 리포트</h2>
+                <p className={`text-xs mb-3 ${subtle}`}>이전 달로 이동했을 때 해당 월의 카테고리별 예산과 실제 지출을 비교합니다.</p>
+                <div className="space-y-2">
+                  {budgetReportRows.map((row) => (
+                    <div key={row.id} className={`rounded-xl border p-3 ${dark ? "border-slate-700 bg-slate-800" : "border-slate-100 bg-slate-50/80"}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: row.color }} />
+                          <strong>{row.name}</strong>
+                        </div>
+                        <span className={`text-xs px-2 py-1 rounded ${row.status === "성공" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
+                          {row.status}
+                        </span>
+                      </div>
+                      <p className={`text-xs mt-1 ${subtle}`}>예산 {formatKRW(row.budget)} / 실제 지출 {formatKRW(row.spent)}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
 
-            <div className={`mt-6 flex border-b rounded-t-2xl px-2 pt-2 ${card} ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
-              <button type="button" className={`flex-1 py-3 text-sm font-semibold border-b-2 transition ${tab === 'calendar' ? 'tab-active border-toss-blue text-toss-blue' : isDark ? 'border-transparent text-slate-400' : 'border-transparent text-slate-500'}`} onClick={() => setTab('calendar')}>캘린더</button>
-              <button type="button" className={`flex-1 py-3 text-sm font-semibold border-b-2 transition ${tab === 'chart' ? 'tab-active border-toss-blue text-toss-blue' : isDark ? 'border-transparent text-slate-400' : 'border-transparent text-slate-500'}`} onClick={() => setTab('chart')}>차트</button>
-            </div>
-
-            <div className={`rounded-b-2xl border border-t-0 p-4 -mt-px ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white/70 border-slate-100'}`}>
-              {tab === 'calendar' && <CalendarView transactions={transactions} cursorMonth={cursorMonth} setCursorMonth={setCursorMonth} onOpenDetail={setDetailTarget} isDark={isDark} />}
-              {tab === 'chart' && <ChartTab transactions={transactions} cursorMonth={cursorMonth} setCursorMonth={setCursorMonth} isDark={isDark} />}
-            </div>
-
-            <p className={`text-center text-[11px] mt-6 ${muted}`}>데이터는 브라우저에만 저장됩니다.</p>
+            <p className={`text-center text-xs mt-6 ${subtle}`}>저장 키 형식: {APP_NAMESPACE}:YYYY-MM (월별 분리 저장)</p>
           </div>
-          <DetailModal
-            tx={detailTarget}
-            onClose={() => setDetailTarget(null)}
-            onDelete={deleteTx}
-            onUpdate={updateTx}
-            customCategories={customCategories}
-            isDark={isDark}
+
+          <DateDetailModal
+            openDate={openDate}
+            entries={entriesByDate[openDate] || []}
+            categories={monthData.categories}
+            onClose={() => setOpenDate(null)}
+            dark={dark}
           />
         </div>
       );
     }
 
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<App />);
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
   </script>
 </body>
 </html>
