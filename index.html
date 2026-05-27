@@ -25,18 +25,22 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
     body { background: #f1f5f9; }
     body.dark { background: #020617; }
+    .mobile-shell { max-width: 480px; margin: 0 auto; }
+    .tab-bar-shadow { box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.08); }
+    .safe-bottom { padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px)); }
   </style>
 </head>
 <body>
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useEffect, useMemo, useState } = React;
+    const { useEffect, useMemo, useRef, useState } = React;
 
-    const APP_NAMESPACE = "allowance-manager-v3";
+    const APP_NAMESPACE = "allowance-manager-v4";
     const LEGACY_KEY = "pocket-money-manager-v1";
     const QUICK_AMOUNTS = [5000, 10000, 50000, 100000];
     const COLOR_POOL = ["#EF4444", "#F97316", "#EAB308", "#22C55E", "#06B6D4", "#3B82F6", "#8B5CF6", "#EC4899", "#64748B"];
@@ -55,6 +59,15 @@
       { id: "inc-etc", name: "기타", type: "income", color: "#64748B" }
     ];
 
+    const STATUS_MESSAGES = {
+      paceFaster: "이번 달 전체 소비 속도가 지난달보다 빠릅니다. 지출 흐름을 한번 점검해 보세요.",
+      paceSlower: "이번 달 전체 소비 속도가 지난달보다 느립니다. 예산을 잘 지키고 있어요.",
+      paceSimilar: "이번 달 전체 소비 속도는 지난달과 비슷한 수준입니다.",
+      budgetOver: (name) => `선택한 '${name}' 카테고리 예산이 초과되었습니다. 추가 지출에 주의하세요.`,
+      budgetOk: (name) => `선택한 '${name}' 카테고리는 현재 예산 범위 안입니다.`,
+      noLastMonth: "지난달 데이터가 없어 소비 속도 비교를 할 수 없습니다."
+    };
+
     const pad = (n) => String(n).padStart(2, "0");
     const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const isMonth = (v) => /^\d{4}-\d{2}$/.test(v || "");
@@ -70,7 +83,10 @@
       const d = new Date(y, mm - 1 + diff, 1);
       return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
     };
-    const toDateKey = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+    const daysInMonth = (m) => {
+      const [y, mm] = m.split("-").map(Number);
+      return new Date(y, mm, 0).getDate();
+    };
     const MONTH_INDEX_KEY = `${APP_NAMESPACE}:month-index`;
     const monthStorageKey = (month) => `${APP_NAMESPACE}:${month}`;
 
@@ -81,7 +97,7 @@
         budgets[c.id] = 0;
       });
       return {
-        version: 3,
+        version: 4,
         month,
         asset: 0,
         categories,
@@ -141,7 +157,7 @@
         : [];
 
       return {
-        version: 3,
+        version: 4,
         month,
         asset: Math.max(0, Math.floor(Number(raw.asset) || 0)),
         categories,
@@ -180,6 +196,24 @@
       const normalized = normalizeMonthData(month, data);
       localStorage.setItem(monthStorageKey(month), JSON.stringify(normalized));
       updateMonthIndex(month);
+    }
+
+    function migrateFromV3IfNeeded() {
+      const doneKey = `${APP_NAMESPACE}:v3-migrated`;
+      if (localStorage.getItem(doneKey) === "1") return;
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (!key || !key.startsWith("allowance-manager-v3:")) continue;
+          const month = key.replace("allowance-manager-v3:", "");
+          if (!isMonth(month)) continue;
+          const raw = localStorage.getItem(key);
+          if (raw) saveMonthData(month, JSON.parse(raw));
+        }
+      } catch {
+      } finally {
+        localStorage.setItem(doneKey, "1");
+      }
     }
 
     function migrateLegacyIfNeeded() {
@@ -245,12 +279,128 @@
       return cells;
     }
 
+    function computeExpenseStats(entries) {
+      const amountMap = {};
+      const countMap = {};
+      entries.forEach((e) => {
+        if (e.type !== "expense") return;
+        amountMap[e.categoryId] = (amountMap[e.categoryId] || 0) + e.amount;
+        countMap[e.categoryId] = (countMap[e.categoryId] || 0) + 1;
+      });
+      return { amountMap, countMap };
+    }
+
+    function computeSpendingPace(currentMonth, currentExpense, lastMonthExpense) {
+      if (lastMonthExpense <= 0) return "none";
+      const today = new Date();
+      const isCurrentMonth = currentMonth === nowMonth();
+      const elapsedDays = isCurrentMonth ? today.getDate() : daysInMonth(currentMonth);
+      const lastDays = daysInMonth(shiftMonth(currentMonth, -1));
+      const currentDaily = currentExpense / Math.max(elapsedDays, 1);
+      const lastDaily = lastMonthExpense / Math.max(lastDays, 1);
+      if (currentDaily > lastDaily * 1.05) return "faster";
+      if (currentDaily < lastDaily * 0.95) return "slower";
+      return "similar";
+    }
+
+    function buildTrendRows(currentStats, lastStats, categories) {
+      return categories.map((cat) => {
+        const current = currentStats.amountMap[cat.id] || 0;
+        const last = lastStats.amountMap[cat.id] || 0;
+        const diff = current - last;
+        const pct = last > 0 ? Math.round((diff / last) * 100) : (current > 0 ? 100 : 0);
+        return {
+          ...cat,
+          current,
+          last,
+          diff,
+          pct,
+          currentCount: currentStats.countMap[cat.id] || 0,
+          lastCount: lastStats.countMap[cat.id] || 0
+        };
+      });
+    }
+
+    function DonutChart({ labels, values, colors, dark }) {
+      const canvasRef = useRef(null);
+      const chartRef = useRef(null);
+
+      useEffect(() => {
+        if (!canvasRef.current) return;
+        if (chartRef.current) {
+          chartRef.current.destroy();
+          chartRef.current = null;
+        }
+        const total = values.reduce((a, b) => a + b, 0);
+        if (total <= 0) return;
+
+        chartRef.current = new Chart(canvasRef.current, {
+          type: "doughnut",
+          data: {
+            labels,
+            datasets: [{
+              data: values,
+              backgroundColor: colors,
+              borderWidth: 2,
+              borderColor: dark ? "#0f172a" : "#ffffff"
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: "62%",
+            plugins: {
+              legend: {
+                position: "bottom",
+                labels: {
+                  color: dark ? "#e2e8f0" : "#334155",
+                  boxWidth: 12,
+                  padding: 14
+                }
+              },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => {
+                    const val = ctx.raw || 0;
+                    const pct = total > 0 ? Math.round((val / total) * 100) : 0;
+                    return ` ${ctx.label}: ${formatKRW(val)} (${pct}%)`;
+                  }
+                }
+              }
+            }
+          }
+        });
+
+        return () => {
+          if (chartRef.current) {
+            chartRef.current.destroy();
+            chartRef.current = null;
+          }
+        };
+      }, [labels, values, colors, dark]);
+
+      const total = values.reduce((a, b) => a + b, 0);
+      if (total <= 0) {
+        return (
+          <div className={`h-64 flex items-center justify-center rounded-xl border ${dark ? "border-slate-700 bg-slate-800/50 text-slate-400" : "border-slate-200 bg-slate-50 text-slate-500"}`}>
+            이번 달 지출 데이터가 없습니다.
+          </div>
+        );
+      }
+
+      return (
+        <div className="h-72 relative">
+          <canvas ref={canvasRef} />
+        </div>
+      );
+    }
+
     function DateDetailModal({ openDate, entries, categories, onClose, dark }) {
       if (!openDate) return null;
       const categoryMap = Object.fromEntries(categories.map((c) => [c.id, c]));
-      const sorted = entries.slice().sort((a, b) => a.id < b.id ? 1 : -1);
+      const sorted = entries.slice().sort((a, b) => (a.id < b.id ? 1 : -1));
       return (
-        <div className="fixed inset-0 z-50 bg-black/50 p-4 flex items-end sm:items-center justify-center" onClick={onClose}>
+        <div className="fixed inset-0 z-[60] bg-black/50 p-4 flex items-end sm:items-center justify-center" onClick={onClose}>
           <div className={`w-full max-w-xl rounded-2xl border p-5 ${dark ? "bg-slate-900 border-slate-700 text-slate-100" : "bg-white border-slate-100 text-slate-900"}`} onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold">{openDate} 상세 내역</h3>
@@ -283,24 +433,291 @@
       );
     }
 
+    function StatusBanner({ messages, dark }) {
+      if (!messages.length) return null;
+      return (
+        <div className={`rounded-xl border p-3 mb-4 space-y-1 ${dark ? "bg-slate-800 border-slate-700" : "bg-brand-sky/60 border-blue-100"}`}>
+          {messages.map((msg, i) => (
+            <p key={i} className={`text-sm ${dark ? "text-slate-200" : "text-slate-800"}`}>{msg}</p>
+          ))}
+        </div>
+      );
+    }
+
+    function BudgetProgressBar({ cat, spent, count, budget, onBudgetChange, dark, inputClass }) {
+      const pct = budget > 0 ? Math.min(100, Math.round((spent / budget) * 100)) : (spent > 0 ? 100 : 0);
+      const over = budget > 0 && spent > budget;
+      return (
+        <div className={`rounded-xl border p-3 ${dark ? "border-slate-700 bg-slate-800/50" : "border-slate-100 bg-slate-50/80"}`}>
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
+              {cat.name}
+            </div>
+            <span className={`text-xs ${dark ? "text-slate-400" : "text-slate-500"}`}>(총 {count}회 결제)</span>
+          </div>
+          <div className="flex items-center justify-between text-xs mb-2">
+            <span>{formatKRW(spent)} / {budget > 0 ? formatKRW(budget) : "예산 미설정"}</span>
+            <span className={over ? "text-red-500 font-bold" : "text-emerald-600 font-bold"}>{budget > 0 ? `${pct}%` : "-"}</span>
+          </div>
+          <div className={`h-2 rounded-full overflow-hidden ${dark ? "bg-slate-700" : "bg-slate-200"}`}>
+            <div
+              className={`h-full rounded-full transition-all ${over ? "bg-red-500" : "bg-brand-blue"}`}
+              style={{ width: `${budget > 0 ? Math.min(100, pct) : (spent > 0 ? 100 : 0)}%` }}
+            />
+          </div>
+          <input
+            type="number"
+            placeholder="예산 상한 입력"
+            value={budget || ""}
+            onChange={(e) => onBudgetChange(cat.id, e.target.value)}
+            className={`w-full mt-2 rounded-lg border px-2 py-1.5 text-sm ${inputClass}`}
+          />
+        </div>
+      );
+    }
+
+    function MonthNav({ cursorMonth, onPrev, onNext, dark, cardClass }) {
+      return (
+        <div className={`rounded-xl border p-3 flex items-center justify-between ${cardClass}`}>
+          <button onClick={onPrev} className="px-3 py-1.5 rounded-lg bg-brand-blue text-white text-sm font-semibold">이전 달</button>
+          <strong className="text-base">{monthToLabel(cursorMonth)}</strong>
+          <button onClick={onNext} className="px-3 py-1.5 rounded-lg bg-brand-blue text-white text-sm font-semibold">다음 달</button>
+        </div>
+      );
+    }
+
+    function CalendarGrid({ month, entriesByDate, categoryMap, onDateClick, dark, wide }) {
+      const subtle = dark ? "text-slate-400" : "text-slate-500";
+      const cellMin = wide ? "min-h-[110px]" : "min-h-[72px]";
+      return (
+        <div>
+          <div className="grid grid-cols-7 gap-1.5 text-center text-xs font-semibold mb-2">
+            {["월", "화", "수", "목", "금", "토", "일"].map((day) => (
+              <div key={day} className={subtle}>{day}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-1.5">
+            {buildCalendarCells(month).map((d, idx) => {
+              if (!d) {
+                return <div key={`blank-${idx}`} className={`${cellMin} rounded-lg ${dark ? "bg-slate-900/30" : "bg-slate-100/50"}`} />;
+              }
+              const list = entriesByDate[d] || [];
+              const expenseDots = [...new Set(
+                list.filter((e) => e.type === "expense").map((e) => categoryMap[e.categoryId]?.color || "#94A3B8")
+              )];
+              return (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => onDateClick(d)}
+                  className={`${cellMin} rounded-lg border p-1.5 text-left flex flex-col ${dark ? "border-slate-700 hover:bg-slate-800" : "border-slate-200 hover:bg-brand-sky/50"}`}
+                >
+                  <div className="text-xs font-bold">{Number(d.slice(-2))}</div>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {expenseDots.map((color, ci) => (
+                      <span key={`${d}-${ci}`} className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+                    ))}
+                  </div>
+                  {list.length > 0 && (
+                    <div className={`mt-auto text-[10px] ${subtle}`}>{list.length}건</div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    function CategoryManager({ monthData, dark, inputClass, onAdd, onDelete, onColorChange, newCategoryName, setNewCategoryName, newCategoryType, setNewCategoryType, newCategoryColor, setNewCategoryColor }) {
+      return (
+        <div className={`rounded-2xl border p-4 ${dark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-100"}`}>
+          <h3 className="font-semibold mb-3">카테고리 커스텀</h3>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <select value={newCategoryType} onChange={(e) => setNewCategoryType(e.target.value)} className={`rounded-xl border px-3 py-2 text-sm ${inputClass}`}>
+              <option value="expense">지출</option>
+              <option value="income">수입</option>
+            </select>
+            <input type="color" value={newCategoryColor} onChange={(e) => setNewCategoryColor(e.target.value)} className="h-10 rounded-xl border px-1" />
+          </div>
+          <div className="flex gap-2 mb-3">
+            <input
+              type="text"
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              placeholder="카테고리 이름 입력"
+              className={`flex-1 rounded-xl border px-3 py-2 text-sm ${inputClass}`}
+            />
+            <button type="button" onClick={onAdd} className="px-4 rounded-xl bg-brand-blue text-white font-semibold text-sm">추가</button>
+          </div>
+          <div className="space-y-2 max-h-48 overflow-y-auto">
+            {monthData.categories.map((cat) => (
+              <div key={cat.id} className={`rounded-xl border p-2 flex items-center gap-2 ${dark ? "border-slate-700" : "border-slate-200"}`}>
+                <input type="color" value={cat.color} onChange={(e) => onColorChange(cat.id, e.target.value)} className="h-8 w-10 rounded border shrink-0" />
+                <span className={`text-xs px-2 py-0.5 rounded shrink-0 ${cat.type === "expense" ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}>
+                  {cat.type === "expense" ? "지출" : "수입"}
+                </span>
+                <span className="text-sm font-medium flex-1 truncate">{cat.name}</span>
+                <button type="button" onClick={() => onDelete(cat.id)} className="px-2 py-1 rounded-lg bg-red-500 text-white text-xs shrink-0">삭제</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    function EntryForm({ entryType, setEntryType, amount, setAmount, addQuickAmount, selectedCategoryId, setSelectedCategoryId, categoriesByType, entryDate, setEntryDate, memo, setMemo, onSubmit, dark, inputClass, cardClass }) {
+      return (
+        <form onSubmit={onSubmit} className={`rounded-2xl border p-4 ${cardClass}`}>
+          <h2 className="font-semibold mb-3">수입 / 지출 입력</h2>
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <button type="button" onClick={() => setEntryType("expense")} className={`py-2.5 rounded-xl font-semibold ${entryType === "expense" ? "bg-red-500 text-white" : dark ? "bg-slate-800" : "bg-slate-100"}`}>지출</button>
+            <button type="button" onClick={() => setEntryType("income")} className={`py-2.5 rounded-xl font-semibold ${entryType === "income" ? "bg-emerald-500 text-white" : dark ? "bg-slate-800" : "bg-slate-100"}`}>수입</button>
+          </div>
+          <label className={`text-xs block mb-1 ${dark ? "text-slate-400" : "text-slate-500"}`}>금액</label>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ""))}
+            className={`w-full rounded-xl border px-3 py-3 text-2xl font-bold mb-3 ${inputClass}`}
+          />
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            {QUICK_AMOUNTS.map((v) => (
+              <button key={v} type="button" onClick={() => addQuickAmount(v)} className="py-4 rounded-xl text-lg font-bold bg-brand-blue text-white">
+                +{v >= 10000 ? `${v / 10000}만` : `${v / 1000}천`}
+              </button>
+            ))}
+          </div>
+          <label className={`text-xs block mb-1 ${dark ? "text-slate-400" : "text-slate-500"}`}>카테고리</label>
+          <select value={selectedCategoryId} onChange={(e) => setSelectedCategoryId(e.target.value)} className={`w-full rounded-xl border px-3 py-2 mb-3 ${inputClass}`}>
+            {(categoriesByType[entryType] || []).map((cat) => (
+              <option key={cat.id} value={cat.id}>{cat.name}</option>
+            ))}
+          </select>
+          <label className={`text-xs block mb-1 ${dark ? "text-slate-400" : "text-slate-500"}`}>날짜</label>
+          <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} className={`w-full rounded-xl border px-3 py-2 mb-3 ${inputClass}`} />
+          <label className={`text-xs block mb-1 ${dark ? "text-slate-400" : "text-slate-500"}`}>메모</label>
+          <input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} className={`w-full rounded-xl border px-3 py-2 mb-4 ${inputClass}`} />
+          <button type="submit" className="w-full py-3.5 rounded-xl bg-slate-900 text-white font-semibold text-base">기록 저장</button>
+        </form>
+      );
+    }
+
+    function AnalysisPanel({ trendRows, entries, categoryMap, donutLabels, donutValues, donutColors, dark, cardClass }) {
+      const sortedEntries = entries.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+      const subtle = dark ? "text-slate-400" : "text-slate-500";
+      return (
+        <div className="space-y-4">
+          <div className={`rounded-2xl border p-4 ${cardClass}`}>
+            <h2 className="font-semibold mb-3">카테고리별 지출 비율</h2>
+            <DonutChart labels={donutLabels} values={donutValues} colors={donutColors} dark={dark} />
+          </div>
+
+          <div className={`rounded-2xl border p-4 ${cardClass}`}>
+            <h2 className="font-semibold mb-3">지난달 대비 카테고리 추이</h2>
+            <div className="space-y-2">
+              {trendRows.map((row) => (
+                <div key={row.id} className={`rounded-xl border p-3 ${dark ? "border-slate-700 bg-slate-800/50" : "border-slate-100 bg-slate-50/80"}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm font-semibold">
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: row.color }} />
+                      {row.name}
+                    </div>
+                    <span className={`text-xs font-bold ${row.diff > 0 ? "text-red-500" : row.diff < 0 ? "text-emerald-600" : subtle}`}>
+                      {row.diff > 0 ? "▲" : row.diff < 0 ? "▼" : "—"} {formatKRW(Math.abs(row.diff))}
+                      {row.last > 0 ? ` (${row.pct > 0 ? "+" : ""}${row.pct}%)` : ""}
+                    </span>
+                  </div>
+                  <p className={`text-xs mt-1 ${subtle}`}>
+                    지난달 {formatKRW(row.last)} (총 {row.lastCount}회) → 이번 달 {formatKRW(row.current)} (총 {row.currentCount}회)
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className={`rounded-2xl border p-4 ${cardClass}`}>
+            <h2 className="font-semibold mb-3">상세 내역 리스트</h2>
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {sortedEntries.length === 0 ? (
+                <p className={`text-sm ${subtle}`}>이번 달 기록이 없습니다.</p>
+              ) : sortedEntries.map((e) => {
+                const cat = categoryMap[e.categoryId];
+                return (
+                  <div key={e.id} className={`rounded-xl border p-3 ${dark ? "border-slate-700 bg-slate-800/50" : "border-slate-100 bg-slate-50/80"}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat?.color || "#94A3B8" }} />
+                        <strong>{cat?.name || "알 수 없음"}</strong>
+                        <span className={`text-[11px] px-1.5 py-0.5 rounded ${e.type === "expense" ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}>
+                          {e.type === "expense" ? "지출" : "수입"}
+                        </span>
+                      </div>
+                      <strong className="text-sm">{e.type === "expense" ? "-" : "+"}{formatKRW(e.amount)}</strong>
+                    </div>
+                    <p className={`text-xs mt-1 ${subtle}`}>{e.date} · {e.memo || "메모 없음"}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function MobileTabBar({ activeTab, onTabChange, dark }) {
+      const tabs = [
+        { id: "home", label: "홈", icon: "🏠" },
+        { id: "input", label: "입력", icon: "✏️" },
+        { id: "analysis", label: "분석", icon: "📊" }
+      ];
+      return (
+        <nav className={`fixed bottom-0 left-0 right-0 z-50 tab-bar-shadow border-t ${dark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"}`}>
+          <div className="mobile-shell grid grid-cols-3">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => onTabChange(tab.id)}
+                className={`py-3 flex flex-col items-center gap-0.5 text-xs font-semibold transition-colors ${
+                  activeTab === tab.id
+                    ? "text-brand-blue"
+                    : dark ? "text-slate-400" : "text-slate-500"
+                }`}
+              >
+                <span className="text-lg">{tab.icon}</span>
+                <span>{tab.label}</span>
+              </button>
+            ))}
+          </div>
+        </nav>
+      );
+    }
+
     function App() {
+      migrateFromV3IfNeeded();
       migrateLegacyIfNeeded();
       const currentMonth = nowMonth();
+      const [viewMode, setViewMode] = useState("mobile");
+      const [activeTab, setActiveTab] = useState("home");
       const [cursorMonth, setCursorMonth] = useState(currentMonth);
       const [monthData, setMonthData] = useState(() => loadMonthData(currentMonth));
+      const [lastMonthData, setLastMonthData] = useState(() => loadMonthData(shiftMonth(currentMonth, -1)));
       const [theme, setTheme] = useState("light");
       const [entryType, setEntryType] = useState("expense");
       const [selectedCategoryId, setSelectedCategoryId] = useState("");
       const [amount, setAmount] = useState("");
-      const [entryDate, setEntryDate] = useState(`${currentMonth}-01`);
+      const [entryDate, setEntryDate] = useState(`${currentMonth}-${pad(new Date().getDate())}`);
       const [memo, setMemo] = useState("");
       const [newCategoryName, setNewCategoryName] = useState("");
       const [newCategoryType, setNewCategoryType] = useState("expense");
       const [newCategoryColor, setNewCategoryColor] = useState("#3B82F6");
       const [openDate, setOpenDate] = useState(null);
-      const [navDirection, setNavDirection] = useState("init");
 
       const dark = theme === "dark";
+      const isMobileView = viewMode === "mobile";
 
       useEffect(() => {
         document.documentElement.classList.toggle("dark", dark);
@@ -310,7 +727,8 @@
       useEffect(() => {
         const loaded = loadMonthData(cursorMonth);
         setMonthData(loaded);
-        setEntryDate(`${cursorMonth}-01`);
+        setLastMonthData(loadMonthData(shiftMonth(cursorMonth, -1)));
+        setEntryDate(`${cursorMonth}-${pad(Math.min(new Date().getDate(), daysInMonth(cursorMonth)))}`);
         setOpenDate(null);
       }, [cursorMonth]);
 
@@ -322,6 +740,7 @@
         () => Object.fromEntries(monthData.categories.map((c) => [c.id, c])),
         [monthData.categories]
       );
+
       const categoriesByType = useMemo(
         () => ({
           expense: monthData.categories.filter((c) => c.type === "expense"),
@@ -350,6 +769,9 @@
         return map;
       }, [monthData.entries]);
 
+      const currentStats = useMemo(() => computeExpenseStats(monthData.entries), [monthData.entries]);
+      const lastStats = useMemo(() => computeExpenseStats(lastMonthData.entries), [lastMonthData.entries]);
+
       const monthIncome = useMemo(
         () => monthData.entries.filter((e) => e.type === "income").reduce((sum, e) => sum + e.amount, 0),
         [monthData.entries]
@@ -358,21 +780,54 @@
         () => monthData.entries.filter((e) => e.type === "expense").reduce((sum, e) => sum + e.amount, 0),
         [monthData.entries]
       );
-      const expenseByCategory = useMemo(() => {
-        const map = {};
-        monthData.entries.forEach((e) => {
-          if (e.type !== "expense") return;
-          map[e.categoryId] = (map[e.categoryId] || 0) + e.amount;
-        });
-        return map;
-      }, [monthData.entries]);
+      const lastMonthExpense = useMemo(
+        () => lastMonthData.entries.filter((e) => e.type === "expense").reduce((sum, e) => sum + e.amount, 0),
+        [lastMonthData.entries]
+      );
 
-      const budgetReportRows = categoriesByType.expense.map((cat) => {
-        const budget = monthData.budgets[cat.id] || 0;
-        const spent = expenseByCategory[cat.id] || 0;
-        return { ...cat, budget, spent, status: spent <= budget ? "성공" : "초과" };
-      });
-      const showPastMonthReport = navDirection === "prev" && monthCompare(cursorMonth, currentMonth) < 0;
+      const trendRows = useMemo(
+        () => buildTrendRows(currentStats, lastStats, categoriesByType.expense),
+        [currentStats, lastStats, categoriesByType.expense]
+      );
+
+      const donutLabels = useMemo(
+        () => categoriesByType.expense.filter((c) => (currentStats.amountMap[c.id] || 0) > 0).map((c) => c.name),
+        [categoriesByType.expense, currentStats.amountMap]
+      );
+      const donutValues = useMemo(
+        () => categoriesByType.expense.filter((c) => (currentStats.amountMap[c.id] || 0) > 0).map((c) => currentStats.amountMap[c.id]),
+        [categoriesByType.expense, currentStats.amountMap]
+      );
+      const donutColors = useMemo(
+        () => categoriesByType.expense.filter((c) => (currentStats.amountMap[c.id] || 0) > 0).map((c) => c.color),
+        [categoriesByType.expense, currentStats.amountMap]
+      );
+
+      const statusMessages = useMemo(() => {
+        const msgs = [];
+        const pace = computeSpendingPace(cursorMonth, monthExpense, lastMonthExpense);
+        if (pace === "none") {
+          msgs.push(STATUS_MESSAGES.noLastMonth);
+        } else if (pace === "faster") {
+          msgs.push(STATUS_MESSAGES.paceFaster);
+        } else if (pace === "slower") {
+          msgs.push(STATUS_MESSAGES.paceSlower);
+        } else {
+          msgs.push(STATUS_MESSAGES.paceSimilar);
+        }
+
+        const selectedCat = categoryMap[selectedCategoryId];
+        if (selectedCat && selectedCat.type === "expense") {
+          const spent = currentStats.amountMap[selectedCategoryId] || 0;
+          const budget = monthData.budgets[selectedCategoryId] || 0;
+          if (budget > 0 && spent > budget) {
+            msgs.push(STATUS_MESSAGES.budgetOver(selectedCat.name));
+          } else if (budget > 0) {
+            msgs.push(STATUS_MESSAGES.budgetOk(selectedCat.name));
+          }
+        }
+        return msgs;
+      }, [cursorMonth, monthExpense, lastMonthExpense, selectedCategoryId, categoryMap, currentStats.amountMap, monthData.budgets]);
 
       const addEntry = (ev) => {
         ev.preventDefault();
@@ -385,6 +840,7 @@
         }));
         setAmount("");
         setMemo("");
+        if (isMobileView) setActiveTab("home");
       };
 
       const addQuickAmount = (plus) => {
@@ -399,11 +855,7 @@
         if (duplicated) return;
         const nextCat = { id: `${newCategoryType}-${uid()}`, name: cleanName, type: newCategoryType, color: newCategoryColor };
         setMonthData((prev) => {
-          const next = {
-            ...prev,
-            categories: [...prev.categories, nextCat],
-            budgets: { ...prev.budgets }
-          };
+          const next = { ...prev, categories: [...prev.categories, nextCat], budgets: { ...prev.budgets } };
           if (nextCat.type === "expense") next.budgets[nextCat.id] = 0;
           return next;
         });
@@ -435,188 +887,189 @@
 
       const updateBudget = (catId, value) => {
         const n = Math.max(0, Math.floor(Number(value) || 0));
-        setMonthData((prev) => ({
-          ...prev,
-          budgets: { ...prev.budgets, [catId]: n }
-        }));
+        setMonthData((prev) => ({ ...prev, budgets: { ...prev.budgets, [catId]: n } }));
       };
+
+      const goPrevMonth = () => setCursorMonth(shiftMonth(cursorMonth, -1));
+      const goNextMonth = () => setCursorMonth(shiftMonth(cursorMonth, 1));
 
       const card = dark ? "bg-slate-900 border-slate-800 text-slate-100" : "bg-white border-slate-100 text-slate-900";
       const input = dark ? "bg-slate-800 border-slate-700 text-slate-100" : "bg-white border-slate-200 text-slate-900";
       const subtle = dark ? "text-slate-400" : "text-slate-500";
+      const shellClass = isMobileView ? "mobile-shell" : "max-w-7xl mx-auto";
+      const contentPad = isMobileView ? "safe-bottom" : "pb-10";
 
-      return (
-        <div className={`${dark ? "bg-slate-950 text-slate-100" : "text-slate-900"} min-h-screen pb-10`}>
-          <div className="max-w-7xl mx-auto px-4 py-6">
-            <header className="mb-5 flex items-center justify-between gap-3">
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-bold">용돈 관리 앱</h1>
-                <p className={`text-sm mt-1 ${subtle}`}>월별(YYYY-MM) 로컬 저장 / 카테고리 컬러 / 예산 리포트 / 확장 캘린더</p>
+      const homeContent = (
+        <div className="space-y-4">
+          <MonthNav cursorMonth={cursorMonth} onPrev={goPrevMonth} onNext={goNextMonth} dark={dark} cardClass={card} />
+
+          <div className={`rounded-2xl border p-4 ${card}`}>
+            <h2 className="font-semibold mb-3">자산 및 예산 현황</h2>
+            <label className={`text-xs block mb-1 ${subtle}`}>현재 보유 자산</label>
+            <input
+              type="number"
+              value={monthData.asset || ""}
+              onChange={(e) => setMonthData((prev) => ({ ...prev, asset: Math.max(0, Number(e.target.value) || 0) }))}
+              className={`w-full rounded-xl border px-3 py-2 mb-3 ${input}`}
+            />
+            <div className="grid grid-cols-3 gap-2 text-center text-sm mb-4">
+              <div className={`rounded-xl p-2 ${dark ? "bg-slate-800" : "bg-slate-50"}`}>
+                <p className={`text-xs ${subtle}`}>수입</p>
+                <p className="font-bold text-emerald-500">{formatKRW(monthIncome)}</p>
               </div>
-              <button onClick={() => setTheme(dark ? "light" : "dark")} className={`rounded-xl px-3 py-2 text-sm border ${card}`}>
-                {dark ? "라이트 모드" : "다크 모드"}
-              </button>
-            </header>
-
-            <section className={`rounded-2xl border p-3 sm:p-4 mb-4 flex items-center justify-between ${card}`}>
-              <button onClick={() => { setCursorMonth(shiftMonth(cursorMonth, -1)); setNavDirection("prev"); }} className="px-3 py-2 rounded-lg bg-brand-blue text-white text-sm font-semibold">이전 달</button>
-              <strong className="text-base sm:text-xl">{monthToLabel(cursorMonth)}</strong>
-              <button onClick={() => { setCursorMonth(shiftMonth(cursorMonth, 1)); setNavDirection("next"); }} className="px-3 py-2 rounded-lg bg-brand-blue text-white text-sm font-semibold">다음 달</button>
-            </section>
-
-            <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
-              <section className="xl:col-span-2 space-y-4">
-                <div className={`rounded-2xl border p-4 ${card}`}>
-                  <h2 className="font-semibold mb-3">자산 및 카테고리 예산 설정</h2>
-                  <label className={`text-xs block mb-1 ${subtle}`}>현재 보유 자산</label>
-                  <input
-                    type="number"
-                    value={monthData.asset || ""}
-                    onChange={(e) => setMonthData((prev) => ({ ...prev, asset: Math.max(0, Number(e.target.value) || 0) }))}
-                    className={`w-full rounded-xl border px-3 py-2 mb-3 ${input}`}
-                  />
-                  <div className="text-sm space-y-1 mb-4">
-                    <p>이번 달 수입: <strong className="text-emerald-500">{formatKRW(monthIncome)}</strong></p>
-                    <p>이번 달 지출: <strong className="text-red-500">{formatKRW(monthExpense)}</strong></p>
-                    <p>잔여 자산: <strong>{formatKRW(monthData.asset + monthIncome - monthExpense)}</strong></p>
-                  </div>
-                  <div className="space-y-2">
-                    {categoriesByType.expense.map((cat) => (
-                      <div key={cat.id}>
-                        <label className="text-xs mb-1 flex items-center gap-2">
-                          <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
-                          {cat.name} 예산 상한
-                        </label>
-                        <input
-                          type="number"
-                          value={monthData.budgets[cat.id] || ""}
-                          onChange={(e) => updateBudget(cat.id, e.target.value)}
-                          className={`w-full rounded-xl border px-3 py-2 ${input}`}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <form onSubmit={addEntry} className={`rounded-2xl border p-4 ${card}`}>
-                  <h2 className="font-semibold mb-3">수입 / 지출 입력</h2>
-                  <div className="grid grid-cols-2 gap-2 mb-3">
-                    <button type="button" onClick={() => setEntryType("expense")} className={`py-2 rounded-xl font-semibold ${entryType === "expense" ? "bg-red-500 text-white" : dark ? "bg-slate-800" : "bg-slate-100"}`}>지출</button>
-                    <button type="button" onClick={() => setEntryType("income")} className={`py-2 rounded-xl font-semibold ${entryType === "income" ? "bg-emerald-500 text-white" : dark ? "bg-slate-800" : "bg-slate-100"}`}>수입</button>
-                  </div>
-                  <label className={`text-xs block mb-1 ${subtle}`}>금액</label>
-                  <input type="text" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^\d]/g, ""))} className={`w-full rounded-xl border px-3 py-3 text-xl font-bold ${input}`} />
-                  <div className="grid grid-cols-2 gap-3 mt-3 mb-3">
-                    {QUICK_AMOUNTS.map((v) => (
-                      <button key={v} type="button" onClick={() => addQuickAmount(v)} className="py-4 rounded-xl text-lg font-bold bg-brand-blue text-white">
-                        +{v >= 10000 ? `${v / 10000}만` : `${v / 1000}천`}
-                      </button>
-                    ))}
-                  </div>
-                  <label className={`text-xs block mb-1 ${subtle}`}>카테고리</label>
-                  <select value={selectedCategoryId} onChange={(e) => setSelectedCategoryId(e.target.value)} className={`w-full rounded-xl border px-3 py-2 mb-3 ${input}`}>
-                    {(categoriesByType[entryType] || []).map((cat) => (
-                      <option key={cat.id} value={cat.id}>{cat.name}</option>
-                    ))}
-                  </select>
-                  <label className={`text-xs block mb-1 ${subtle}`}>날짜</label>
-                  <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} className={`w-full rounded-xl border px-3 py-2 mb-3 ${input}`} />
-                  <label className={`text-xs block mb-1 ${subtle}`}>메모</label>
-                  <input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} className={`w-full rounded-xl border px-3 py-2 mb-3 ${input}`} />
-                  <button type="submit" className="w-full py-3 rounded-xl bg-slate-900 text-white font-semibold">기록 저장</button>
-                </form>
-
-                <div className={`rounded-2xl border p-4 ${card}`}>
-                  <h2 className="font-semibold mb-3">카테고리 커스텀 설정</h2>
-                  <div className="grid grid-cols-2 gap-2 mb-2">
-                    <select value={newCategoryType} onChange={(e) => setNewCategoryType(e.target.value)} className={`rounded-xl border px-3 py-2 ${input}`}>
-                      <option value="expense">지출</option>
-                      <option value="income">수입</option>
-                    </select>
-                    <input type="color" value={newCategoryColor} onChange={(e) => setNewCategoryColor(e.target.value)} className="h-10 rounded-xl border px-1" />
-                  </div>
-                  <div className="flex gap-2 mb-3">
-                    <input type="text" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} placeholder="카테고리 이름 입력" className={`flex-1 rounded-xl border px-3 py-2 ${input}`} />
-                    <button type="button" onClick={addCategory} className="px-4 rounded-xl bg-brand-blue text-white font-semibold">추가</button>
-                  </div>
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {monthData.categories.map((cat) => (
-                      <div key={cat.id} className={`rounded-xl border p-2 ${dark ? "border-slate-700" : "border-slate-200"}`}>
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className={`text-xs px-2 py-0.5 rounded ${cat.type === "expense" ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}>
-                            {cat.type === "expense" ? "지출" : "수입"}
-                          </span>
-                          <span className="text-sm font-semibold">{cat.name}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <input type="color" value={cat.color} onChange={(e) => updateCategoryColor(cat.id, e.target.value)} className="h-8 w-12 rounded border" />
-                          <button type="button" onClick={() => deleteCategory(cat.id)} className="ml-auto px-3 py-1 rounded-lg bg-red-500 text-white text-sm">삭제</button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </section>
-
-              <section className={`xl:col-span-3 rounded-2xl border p-4 ${card}`}>
-                <h2 className="font-semibold mb-3">캘린더</h2>
-                <div className="grid grid-cols-7 gap-2 text-center text-xs font-semibold mb-2">
-                  {["월", "화", "수", "목", "금", "토", "일"].map((day) => (
-                    <div key={day} className={subtle}>{day}</div>
-                  ))}
-                </div>
-                <div className="grid grid-cols-7 gap-2">
-                  {buildCalendarCells(cursorMonth).map((d, idx) => {
-                    if (!d) {
-                      return <div key={`blank-${idx}`} className={`min-h-[150px] rounded-xl ${dark ? "bg-slate-900/30" : "bg-slate-100/50"}`} />;
-                    }
-                    const list = entriesByDate[d] || [];
-                    const expenseCategoryDots = [...new Set(
-                      list
-                        .filter((e) => e.type === "expense")
-                        .map((e) => categoryMap[e.categoryId]?.color || "#94A3B8")
-                    )];
-                    return (
-                      <button key={d} type="button" onClick={() => setOpenDate(d)} className={`min-h-[150px] rounded-xl border p-2 text-left flex flex-col ${dark ? "border-slate-700 hover:bg-slate-800" : "border-slate-200 hover:bg-brand-sky/50"}`}>
-                        <div className="text-sm font-bold">{Number(d.slice(-2))}</div>
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {expenseCategoryDots.map((color, colorIdx) => (
-                            <span key={`${d}-${colorIdx}`} className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
-                          ))}
-                        </div>
-                        <div className={`mt-auto text-[11px] ${subtle}`}>{list.length > 0 ? `${list.length}건` : ""}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
+              <div className={`rounded-xl p-2 ${dark ? "bg-slate-800" : "bg-slate-50"}`}>
+                <p className={`text-xs ${subtle}`}>지출</p>
+                <p className="font-bold text-red-500">{formatKRW(monthExpense)}</p>
+              </div>
+              <div className={`rounded-xl p-2 ${dark ? "bg-slate-800" : "bg-slate-50"}`}>
+                <p className={`text-xs ${subtle}`}>잔여</p>
+                <p className="font-bold">{formatKRW(monthData.asset + monthIncome - monthExpense)}</p>
+              </div>
             </div>
 
-            {showPastMonthReport && (
-              <section className={`rounded-2xl border p-4 mt-4 ${card}`}>
-                <h2 className="font-semibold mb-2">{monthToLabel(cursorMonth)} 예산 리포트</h2>
-                <p className={`text-xs mb-3 ${subtle}`}>이전 달로 이동했을 때 해당 월의 카테고리별 예산과 실제 지출을 비교합니다.</p>
-                <div className="space-y-2">
-                  {budgetReportRows.map((row) => (
-                    <div key={row.id} className={`rounded-xl border p-3 ${dark ? "border-slate-700 bg-slate-800" : "border-slate-100 bg-slate-50/80"}`}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-sm">
-                          <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: row.color }} />
-                          <strong>{row.name}</strong>
-                        </div>
-                        <span className={`text-xs px-2 py-1 rounded ${row.status === "성공" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
-                          {row.status}
-                        </span>
-                      </div>
-                      <p className={`text-xs mt-1 ${subtle}`}>예산 {formatKRW(row.budget)} / 실제 지출 {formatKRW(row.spent)}</p>
-                    </div>
-                  ))}
+            <h3 className="font-semibold text-sm mb-2">카테고리별 예산 소진율</h3>
+            <div className="space-y-2">
+              {categoriesByType.expense.map((cat) => (
+                <BudgetProgressBar
+                  key={cat.id}
+                  cat={cat}
+                  spent={currentStats.amountMap[cat.id] || 0}
+                  count={currentStats.countMap[cat.id] || 0}
+                  budget={monthData.budgets[cat.id] || 0}
+                  onBudgetChange={updateBudget}
+                  dark={dark}
+                  inputClass={input}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className={`rounded-2xl border p-4 ${card}`}>
+            <h2 className="font-semibold mb-3">달력</h2>
+            <CalendarGrid
+              month={cursorMonth}
+              entriesByDate={entriesByDate}
+              categoryMap={categoryMap}
+              onDateClick={setOpenDate}
+              dark={dark}
+              wide={!isMobileView}
+            />
+          </div>
+
+          <CategoryManager
+            monthData={monthData}
+            dark={dark}
+            inputClass={input}
+            onAdd={addCategory}
+            onDelete={deleteCategory}
+            onColorChange={updateCategoryColor}
+            newCategoryName={newCategoryName}
+            setNewCategoryName={setNewCategoryName}
+            newCategoryType={newCategoryType}
+            setNewCategoryType={setNewCategoryType}
+            newCategoryColor={newCategoryColor}
+            setNewCategoryColor={setNewCategoryColor}
+          />
+        </div>
+      );
+
+      const inputContent = (
+        <div className="space-y-4">
+          <MonthNav cursorMonth={cursorMonth} onPrev={goPrevMonth} onNext={goNextMonth} dark={dark} cardClass={card} />
+          <EntryForm
+            entryType={entryType}
+            setEntryType={setEntryType}
+            amount={amount}
+            setAmount={setAmount}
+            addQuickAmount={addQuickAmount}
+            selectedCategoryId={selectedCategoryId}
+            setSelectedCategoryId={setSelectedCategoryId}
+            categoriesByType={categoriesByType}
+            entryDate={entryDate}
+            setEntryDate={setEntryDate}
+            memo={memo}
+            setMemo={setMemo}
+            onSubmit={addEntry}
+            dark={dark}
+            inputClass={input}
+            cardClass={card}
+          />
+        </div>
+      );
+
+      const analysisContent = (
+        <div className="space-y-4">
+          <MonthNav cursorMonth={cursorMonth} onPrev={goPrevMonth} onNext={goNextMonth} dark={dark} cardClass={card} />
+          <AnalysisPanel
+            trendRows={trendRows}
+            entries={monthData.entries}
+            categoryMap={categoryMap}
+            donutLabels={donutLabels}
+            donutValues={donutValues}
+            donutColors={donutColors}
+            dark={dark}
+            cardClass={card}
+          />
+        </div>
+      );
+
+      return (
+        <div className={`${dark ? "bg-slate-950 text-slate-100" : "text-slate-900 bg-slate-100"} min-h-screen ${contentPad}`}>
+          <div className={`${shellClass} px-4 py-4`}>
+            <header className="mb-4">
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <h1 className="text-xl sm:text-2xl font-bold">용돈 관리 앱</h1>
+                <button onClick={() => setTheme(dark ? "light" : "dark")} className={`px-3 py-1.5 rounded-lg text-xs border ${card}`}>
+                  {dark ? "라이트" : "다크"}
+                </button>
+              </div>
+
+              <div className={`rounded-xl border p-1 flex gap-1 ${card}`}>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("mobile")}
+                  className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${viewMode === "mobile" ? "bg-brand-blue text-white" : dark ? "text-slate-400" : "text-slate-600"}`}
+                >
+                  📱 모바일 보기
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("desktop")}
+                  className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${viewMode === "desktop" ? "bg-brand-blue text-white" : dark ? "text-slate-400" : "text-slate-600"}`}
+                >
+                  💻 PC 보기
+                </button>
+              </div>
+            </header>
+
+            <StatusBanner messages={statusMessages} dark={dark} />
+
+            {isMobileView ? (
+              <div>
+                {activeTab === "home" && homeContent}
+                {activeTab === "input" && inputContent}
+                {activeTab === "analysis" && analysisContent}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                <div className="xl:col-span-1 space-y-4">
+                  {homeContent}
                 </div>
-              </section>
+                <div className="xl:col-span-1">
+                  {inputContent}
+                </div>
+                <div className="xl:col-span-1">
+                  {analysisContent}
+                </div>
+              </div>
             )}
 
-            <p className={`text-center text-xs mt-6 ${subtle}`}>저장 키 형식: {APP_NAMESPACE}:YYYY-MM (월별 분리 저장)</p>
+            <p className={`text-center text-xs mt-6 ${subtle}`}>저장 키: {APP_NAMESPACE}:YYYY-MM</p>
           </div>
+
+          {isMobileView && (
+            <MobileTabBar activeTab={activeTab} onTabChange={setActiveTab} dark={dark} />
+          )}
 
           <DateDetailModal
             openDate={openDate}
