@@ -742,10 +742,99 @@
       );
     }
 
+    function TrendCompareChart({ trendRows, dark, cardClass }) {
+      const canvasRef = useRef(null);
+      const chartRef = useRef(null);
+      const rows = trendRows.filter((r) => r.current > 0 || r.last > 0);
+
+      useEffect(() => {
+        if (!canvasRef.current) return;
+        if (chartRef.current) {
+          chartRef.current.destroy();
+          chartRef.current = null;
+        }
+        if (!rows.length) return;
+
+        chartRef.current = new Chart(canvasRef.current, {
+          type: "bar",
+          data: {
+            labels: rows.map((r) => r.name),
+            datasets: [
+              {
+                label: "지난달",
+                data: rows.map((r) => r.last),
+                backgroundColor: dark ? "rgba(148,163,184,0.7)" : "rgba(148,163,184,0.6)",
+                borderRadius: 6
+              },
+              {
+                label: "이번달",
+                data: rows.map((r) => r.current),
+                backgroundColor: dark ? "rgba(59,130,246,0.8)" : "rgba(37,99,235,0.75)",
+                borderRadius: 6
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: {
+                ticks: { color: dark ? "#cbd5e1" : "#475569" },
+                grid: { display: false }
+              },
+              y: {
+                beginAtZero: true,
+                ticks: {
+                  color: dark ? "#cbd5e1" : "#475569",
+                  callback: (v) => Number(v).toLocaleString("ko-KR")
+                },
+                grid: {
+                  color: dark ? "rgba(148,163,184,0.25)" : "rgba(148,163,184,0.2)"
+                }
+              }
+            },
+            plugins: {
+              legend: {
+                labels: { color: dark ? "#e2e8f0" : "#334155" }
+              },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => ` ${ctx.dataset.label}: ${formatKRW(ctx.raw || 0)}`
+                }
+              }
+            }
+          }
+        });
+
+        return () => {
+          if (chartRef.current) {
+            chartRef.current.destroy();
+            chartRef.current = null;
+          }
+        };
+      }, [dark, rows]);
+
+      return (
+        <div className={`rounded-2xl border p-4 ${cardClass}`}>
+          <h2 className="font-semibold mb-3">카테고리 지난달 대비 비교 그래프</h2>
+          {rows.length === 0 ? (
+            <div className={`h-56 rounded-xl border flex items-center justify-center text-sm ${dark ? "border-slate-700 bg-slate-800/40 text-slate-400" : "border-slate-200 bg-slate-50 text-slate-500"}`}>
+              비교할 지출 데이터가 없습니다.
+            </div>
+          ) : (
+            <div className="h-64">
+              <canvas ref={canvasRef} />
+            </div>
+          )}
+        </div>
+      );
+    }
+
     function AnalysisPanel({ trendRows, entries, categoryMap, donutLabels, donutValues, donutColors, dark, cardClass }) {
       return (
         <div className="space-y-4">
           <DonutSection donutLabels={donutLabels} donutValues={donutValues} donutColors={donutColors} dark={dark} cardClass={cardClass} />
+          <TrendCompareChart trendRows={trendRows} dark={dark} cardClass={cardClass} />
           <TrendSection trendRows={trendRows} dark={dark} cardClass={cardClass} />
           <DetailList entries={entries} categoryMap={categoryMap} dark={dark} cardClass={cardClass} />
         </div>
@@ -1003,11 +1092,16 @@
     }
 
     function TabBar({ activeTab, onTabChange, dark, cardClass, variant }) {
-      const tabs = [
-        { id: "home", label: "홈", icon: "🏠" },
-        { id: "input", label: "입력", icon: "✏️" },
-        { id: "analysis", label: "분석", icon: "📊" }
-      ];
+      const tabs = variant === "mobile"
+        ? [
+            { id: "home", label: "홈", icon: "🏠" },
+            { id: "analysis", label: "분석", icon: "📊" }
+          ]
+        : [
+            { id: "home", label: "홈", icon: "🏠" },
+            { id: "input", label: "입력", icon: "✏️" },
+            { id: "analysis", label: "분석", icon: "📊" }
+          ];
 
       if (variant === "desktop") {
         return (
@@ -1080,6 +1174,10 @@
 
       const dark = theme === "dark";
       const isMobileView = viewMode === "mobile";
+
+      useEffect(() => {
+        if (isMobileView && activeTab === "input") setActiveTab("home");
+      }, [isMobileView, activeTab]);
 
       useEffect(() => {
         document.documentElement.classList.toggle("dark", dark);
@@ -1419,11 +1517,7 @@
       );
 
       const activeTabContent = isMobileView
-        ? (activeTab === "home"
-          ? mobileHomeContent
-          : activeTab === "input"
-            ? inputContent
-            : analysisContent)
+        ? (activeTab === "analysis" ? analysisContent : mobileHomeContent)
         : null;
 
       return (
