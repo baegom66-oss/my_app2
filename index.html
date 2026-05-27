@@ -463,7 +463,7 @@
       );
     }
 
-    function DateDetailModal({ openDate, entries, categories, onClose, dark }) {
+    function DateDetailModal({ openDate, entries, categories, onClose, dark, onEditEntry, onDeleteEntry }) {
       if (!openDate) return null;
       const categoryMap = Object.fromEntries(categories.map((c) => [c.id, c]));
       const sorted = entries.slice().sort((a, b) => (a.id < b.id ? 1 : -1));
@@ -489,7 +489,23 @@
                           {e.type === "expense" ? "지출" : "수입"}
                         </span>
                       </div>
-                      <strong>{e.type === "expense" ? "-" : "+"}{formatKRW(e.amount)}</strong>
+                      <div className="flex items-center gap-2">
+                        <strong>{e.type === "expense" ? "-" : "+"}{formatKRW(e.amount)}</strong>
+                        <button
+                          type="button"
+                          onClick={() => onEditEntry?.(e)}
+                          className={`px-2 py-1 text-xs rounded-lg border ${dark ? "border-slate-600 bg-slate-700/60 text-slate-100" : "border-gray-300 bg-white text-slate-700"}`}
+                        >
+                          수정
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onDeleteEntry?.(e.id)}
+                          className="px-2 py-1 text-xs rounded-lg border border-rose-300 bg-rose-50 text-rose-700"
+                        >
+                          삭제
+                        </button>
+                      </div>
                     </div>
                     <p className={`mt-2 text-xs ${dark ? "text-slate-400" : "text-slate-500"}`}>{e.memo || "메모 없음"}</p>
                   </div>
@@ -543,6 +559,41 @@
               </g>
             )}
           </svg>
+        </div>
+      );
+    }
+
+    function EntryEditModal({ open, draft, categoriesByType, dark, inputClass, onChange, onClose, onSave }) {
+      if (!open || !draft) return null;
+      const categoryOptions = categoriesByType[draft.type] || [];
+      return (
+        <div className="fixed inset-0 z-[70] bg-black/45 p-4 flex items-end sm:items-center justify-center" onClick={onClose}>
+          <div className={`w-full max-w-md rounded-2xl border p-4 ${dark ? "bg-slate-900 border-slate-700 text-slate-100" : "bg-white border-gray-200 text-slate-900"}`} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-base font-bold">내역 수정</h3>
+              <button type="button" onClick={onClose} className={`px-2.5 py-1 text-xs rounded-lg ${dark ? "bg-slate-800" : "bg-slate-100"}`}>닫기</button>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs block">유형</label>
+              <select value={draft.type} onChange={(e) => onChange({ type: e.target.value })} className={`w-full rounded-xl border px-3 py-2 text-sm ${inputClass}`}>
+                <option value="expense">지출</option>
+                <option value="income">수입</option>
+              </select>
+              <label className="text-xs block">카테고리</label>
+              <select value={draft.categoryId} onChange={(e) => onChange({ categoryId: e.target.value })} className={`w-full rounded-xl border px-3 py-2 text-sm ${inputClass}`}>
+                {categoryOptions.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+              </select>
+              <label className="text-xs block">금액</label>
+              <input type="text" inputMode="numeric" value={draft.amount} onChange={(e) => onChange({ amount: e.target.value.replace(/[^\d]/g, "") })} className={`w-full rounded-xl border px-3 py-2 text-sm ${inputClass}`} />
+              <label className="text-xs block">날짜</label>
+              <input type="date" value={draft.date} onChange={(e) => onChange({ date: e.target.value })} className={`w-full rounded-xl border px-3 py-2 text-sm ${inputClass}`} />
+              <label className="text-xs block">메모</label>
+              <input type="text" value={draft.memo} onChange={(e) => onChange({ memo: e.target.value })} className={`w-full rounded-xl border px-3 py-2 text-sm ${inputClass}`} />
+            </div>
+            <button type="button" onClick={onSave} className="w-full mt-4 py-2.5 rounded-xl bg-brand-blue text-white font-semibold text-sm">
+              수정 저장
+            </button>
+          </div>
         </div>
       );
     }
@@ -795,7 +846,7 @@
       );
     }
 
-    function DetailList({ entries, categoryMap, dark, cardClass, maxHeight = "max-h-96" }) {
+    function DetailList({ entries, categoryMap, dark, cardClass, maxHeight = "max-h-96", onEditEntry, onDeleteEntry }) {
       const sortedEntries = entries.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
       const subtle = dark ? "text-slate-400" : "text-slate-500";
       return (
@@ -816,7 +867,23 @@
                         {e.type === "expense" ? "지출" : "수입"}
                       </span>
                     </div>
-                    <strong className="text-sm">{e.type === "expense" ? "-" : "+"}{formatKRW(e.amount)}</strong>
+                    <div className="flex items-center gap-2">
+                      <strong className="text-sm">{e.type === "expense" ? "-" : "+"}{formatKRW(e.amount)}</strong>
+                      <button
+                        type="button"
+                        onClick={() => onEditEntry?.(e)}
+                        className={`px-2 py-1 text-xs rounded-lg border ${dark ? "border-slate-600 bg-slate-700/60 text-slate-100" : "border-gray-300 bg-white text-slate-700"}`}
+                      >
+                        수정
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onDeleteEntry?.(e.id)}
+                        className="px-2 py-1 text-xs rounded-lg border border-rose-300 bg-rose-50 text-rose-700"
+                      >
+                        삭제
+                      </button>
+                    </div>
                   </div>
                   <p className={`text-xs mt-1 ${subtle}`}>{e.date} · {e.memo || "메모 없음"}</p>
                 </div>
@@ -952,13 +1019,13 @@
       );
     }
 
-    function AnalysisPanel({ trendRows, entries, categoryMap, donutLabels, donutValues, donutColors, dark, cardClass }) {
+    function AnalysisPanel({ trendRows, entries, categoryMap, donutLabels, donutValues, donutColors, dark, cardClass, onEditEntry, onDeleteEntry }) {
       return (
         <div className="space-y-4">
           <DonutSection donutLabels={donutLabels} donutValues={donutValues} donutColors={donutColors} dark={dark} cardClass={cardClass} />
           <TrendCompareChart trendRows={trendRows} dark={dark} cardClass={cardClass} />
           <TrendSection trendRows={trendRows} dark={dark} cardClass={cardClass} />
-          <DetailList entries={entries} categoryMap={categoryMap} dark={dark} cardClass={cardClass} />
+          <DetailList entries={entries} categoryMap={categoryMap} dark={dark} cardClass={cardClass} onEditEntry={onEditEntry} onDeleteEntry={onDeleteEntry} />
         </div>
       );
     }
@@ -1289,6 +1356,7 @@
       const [newCategoryType, setNewCategoryType] = useState("expense");
       const [newCategoryColor, setNewCategoryColor] = useState("#3B82F6");
       const [openDate, setOpenDate] = useState(null);
+      const [entryEditDraft, setEntryEditDraft] = useState(null);
       const [budgetOpen, setBudgetOpen] = useState(false);
       const [categoryOpen, setCategoryOpen] = useState(false);
       const [budgetPanelOpen, setBudgetPanelOpen] = useState(false);
@@ -1455,6 +1523,58 @@
       const addQuickAmount = (plus) => {
         const base = Number(String(amount).replace(/[^\d]/g, "")) || 0;
         setAmount(String(base + plus));
+      };
+
+      const openEntryEdit = (entry) => {
+        if (!entry) return;
+        setEntryEditDraft({
+          id: entry.id,
+          type: entry.type,
+          categoryId: entry.categoryId,
+          amount: String(entry.amount || ""),
+          date: entry.date,
+          memo: entry.memo || ""
+        });
+      };
+
+      const updateEntryDraft = (patch) => {
+        setEntryEditDraft((prev) => {
+          if (!prev) return prev;
+          const next = { ...prev, ...patch };
+          if (patch.type && patch.type !== prev.type) {
+            const fallback = categoriesByType[patch.type]?.[0];
+            next.categoryId = fallback?.id || "";
+          }
+          return next;
+        });
+      };
+
+      const saveEntryEdit = () => {
+        if (!entryEditDraft) return;
+        const n = Number(String(entryEditDraft.amount).replace(/[^\d]/g, ""));
+        if (!n || !entryEditDraft.categoryId || !entryEditDraft.date?.startsWith(cursorMonth)) return;
+        setMonthData((prev) => ({
+          ...prev,
+          entries: prev.entries.map((e) => e.id === entryEditDraft.id ? {
+            ...e,
+            type: entryEditDraft.type,
+            categoryId: entryEditDraft.categoryId,
+            amount: n,
+            date: entryEditDraft.date,
+            memo: entryEditDraft.memo.trim()
+          } : e)
+        }));
+        setEntryEditDraft(null);
+      };
+
+      const deleteEntry = (entryId) => {
+        if (!entryId) return;
+        if (!window.confirm("이 내역을 삭제할까요?")) return;
+        setMonthData((prev) => ({
+          ...prev,
+          entries: prev.entries.filter((e) => e.id !== entryId)
+        }));
+        setEntryEditDraft((prev) => (prev?.id === entryId ? null : prev));
       };
 
       const addCategory = () => {
@@ -1628,7 +1748,14 @@
             {categoryManagerInner}
           </CollapsiblePanel>
           {calendarBlock}
-          <DetailList entries={monthData.entries} categoryMap={categoryMap} dark={dark} cardClass={card} />
+          <DetailList
+            entries={monthData.entries}
+            categoryMap={categoryMap}
+            dark={dark}
+            cardClass={card}
+            onEditEntry={openEntryEdit}
+            onDeleteEntry={deleteEntry}
+          />
           <DonutSection donutLabels={donutLabels} donutValues={donutValues} donutColors={donutColors} dark={dark} cardClass={card} />
         </div>
       );
@@ -1652,6 +1779,8 @@
             donutColors={donutColors}
             dark={dark}
             cardClass={card}
+            onEditEntry={openEntryEdit}
+            onDeleteEntry={deleteEntry}
           />
         </div>
       );
@@ -1740,6 +1869,19 @@
             categories={monthData.categories}
             onClose={() => setOpenDate(null)}
             dark={dark}
+            onEditEntry={openEntryEdit}
+            onDeleteEntry={deleteEntry}
+          />
+
+          <EntryEditModal
+            open={!!entryEditDraft}
+            draft={entryEditDraft}
+            categoriesByType={categoriesByType}
+            dark={dark}
+            inputClass={input}
+            onChange={updateEntryDraft}
+            onClose={() => setEntryEditDraft(null)}
+            onSave={saveEntryEdit}
           />
         </div>
       );
