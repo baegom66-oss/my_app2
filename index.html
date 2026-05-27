@@ -11,14 +11,14 @@
       theme: {
         extend: {
           colors: {
-            // Soft highlighter / pastel accents
+            // Muted pastel accents
             brand: {
-              blue: "#6B8AF7",
-              mint: "#67DCC2",
-              peach: "#FFB38A",
-              rose: "#FF8FA3",
-              butter: "#FFE28A",
-              sky: "#EAF2FF"
+              blue: "#7690D8",
+              mint: "#7BBEAE",
+              peach: "#DDB292",
+              rose: "#D59AA7",
+              butter: "#DCCB96",
+              sky: "#EDF3FB"
             }
           },
           fontFamily: {
@@ -70,24 +70,18 @@
 
     /* Card: feels like paper cells (thin border, no heavy shadows) */
     .paper-card{
-      background-color: rgba(255, 255, 255, 0.90);
-      background-image:
-        linear-gradient(to right, rgba(15,23,42,0.035) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(15,23,42,0.035) 1px, transparent 1px);
-      background-size: 22px 22px;
+      background-color: rgba(255, 255, 255, 0.97);
+      background-image: none;
       box-shadow: 0 1px 0 var(--paper-shadow);
     }
     body.dark .paper-card{
-      background-color: rgba(15, 23, 42, 0.62);
-      background-image:
-        linear-gradient(to right, rgba(226,232,240,0.06) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(226,232,240,0.06) 1px, transparent 1px);
-      background-size: 22px 22px;
+      background-color: rgba(17, 24, 39, 0.92);
+      background-image: none;
       box-shadow: 0 1px 0 var(--paper-shadow);
     }
 
     .cozy-title{ font-family: Gaegu, Pretendard, sans-serif; letter-spacing: 0.2px; font-weight: 700; }
-    .cozy-note{ font-family: Gaegu, Pretendard, sans-serif; font-weight: 600; }
+    .cozy-note{ font-family: Pretendard, Apple SD Gothic Neo, Malgun Gothic, sans-serif; font-weight: 600; }
     .mobile-shell { max-width: 480px; margin: 0 auto; }
     .tab-bar-shadow { box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.08); }
     .safe-bottom { padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px)); }
@@ -116,20 +110,20 @@
     const APP_NAMESPACE = "allowance-manager-v4";
     const LEGACY_KEY = "pocket-money-manager-v1";
     const QUICK_AMOUNTS = [5000, 10000, 50000, 100000];
-    // Pastel / highlighter tones (soft but clear)
-    const COLOR_POOL = ["#FF8FA3", "#FFB38A", "#FFE28A", "#67DCC2", "#7FD3FF", "#6B8AF7", "#B6A7FF", "#FFA6D6", "#A8B3C7"];
+    // Muted pastel tones
+    const COLOR_POOL = ["#D7A1AD", "#DAB59D", "#DCCB96", "#84BFAF", "#8EB9D3", "#7D92C8", "#B5ABC9", "#D7B3C9", "#A8B3C7"];
 
     const DEFAULT_EXPENSE_CATEGORIES = [
-      { id: "exp-food", name: "식비", type: "expense", color: "#FF8FA3" },
-      { id: "exp-transport", name: "교통", type: "expense", color: "#6B8AF7" },
-      { id: "exp-fun", name: "여가", type: "expense", color: "#FFE28A" },
-      { id: "exp-shopping", name: "쇼핑", type: "expense", color: "#FFA6D6" },
+      { id: "exp-food", name: "식비", type: "expense", color: "#D7A1AD" },
+      { id: "exp-transport", name: "교통", type: "expense", color: "#7D92C8" },
+      { id: "exp-fun", name: "여가", type: "expense", color: "#DCCB96" },
+      { id: "exp-shopping", name: "쇼핑", type: "expense", color: "#D7B3C9" },
       { id: "exp-etc", name: "기타", type: "expense", color: "#A8B3C7" }
     ];
     const DEFAULT_INCOME_CATEGORIES = [
-      { id: "inc-allowance", name: "용돈", type: "income", color: "#67DCC2" },
-      { id: "inc-parttime", name: "알바", type: "income", color: "#7FD3FF" },
-      { id: "inc-bonus", name: "보너스", type: "income", color: "#B6A7FF" },
+      { id: "inc-allowance", name: "용돈", type: "income", color: "#84BFAF" },
+      { id: "inc-parttime", name: "알바", type: "income", color: "#8EB9D3" },
+      { id: "inc-bonus", name: "보너스", type: "income", color: "#B5ABC9" },
       { id: "inc-etc", name: "기타", type: "income", color: "#A8B3C7" }
     ];
 
@@ -511,13 +505,13 @@
       const stage = ratio > 1 ? "boom" : ratio > 0.8 ? "panic" : ratio > 0.5 ? "alert" : "calm";
       const ropeHeight = stage === "calm" ? 64 : stage === "alert" ? 44 : stage === "panic" ? 26 : 18;
       const face = stage === "calm"
-        ? { eyeR: 2.1, mouth: "M38 33 Q43 36 48 33", sweat: false }
+        ? { eyeR: 1.9, mouth: "M42 33 Q45 35 48 33", sweat: false }
         : stage === "alert"
-          ? { eyeR: 3.2, mouth: "M37 35 Q43 31 49 35", sweat: true }
-          : { eyeR: 3.6, mouth: "M37 35 Q43 30 49 35", sweat: true };
+          ? { eyeR: 2.7, mouth: "M41 35 Q45 31 49 35", sweat: true }
+          : { eyeR: 3.1, mouth: "M41 35 Q45 30 49 35", sweat: true };
 
       return (
-        <div className={`w-[168px] h-[130px] rounded-2xl border relative overflow-hidden ${dark ? "bg-slate-900/60 border-slate-700" : "bg-white/75 border-gray-200"}`}>
+        <div className={`w-[168px] h-[130px] rounded-2xl border relative overflow-hidden ${dark ? "bg-slate-900/80 border-slate-700" : "bg-[#fffefb] border-gray-200"}`}>
           <div className={`absolute top-1 left-1/2 -translate-x-1/2 text-[11px] px-2 py-0.5 rounded-full ${dark ? "bg-slate-800 text-slate-200" : "bg-slate-100 text-slate-700"}`}>
             {stage === "calm" ? "평온" : stage === "alert" ? "주의" : stage === "panic" ? "위급" : "폭발"}
           </div>
@@ -525,24 +519,27 @@
             <line x1="84" y1="0" x2="84" y2={ropeHeight} stroke={dark ? "#94a3b8" : "#64748b"} strokeWidth="2.2" strokeLinecap="round" />
             {stage !== "boom" ? (
               <g className={stage === "panic" ? "fish-shake" : ""} transform={`translate(50 ${ropeHeight})`}>
-                <path d="M34 21 C30 12, 20 8, 10 12 C16 17, 16 27, 10 32 C21 36, 30 32, 34 24 Z" fill={dark ? "#475569" : "#9CA3AF"} />
-                <ellipse cx="44" cy="22" rx="24" ry="16" fill={stage === "calm" ? "#9EE7D4" : stage === "alert" ? "#FFE28A" : "#FFB38A"} stroke={dark ? "#334155" : "#64748b"} strokeWidth="2" />
-                <path d="M57 22 C67 18, 74 12, 80 10 C76 18, 76 26, 80 34 C74 31, 67 26, 57 22 Z" fill={stage === "calm" ? "#8FD8F7" : stage === "alert" ? "#FFBFA1" : "#FFA6D6"} stroke={dark ? "#334155" : "#64748b"} strokeWidth="2" />
-                <circle cx="39" cy="20" r={face.eyeR} fill="#0f172a" />
-                <circle cx="47" cy="20" r={face.eyeR} fill="#0f172a" />
-                <path d={face.mouth} stroke="#0f172a" strokeWidth="1.8" fill="none" strokeLinecap="round" />
-                {face.sweat && <path d="M54 12 C58 6, 61 11, 58 16 C56 18, 53 16, 54 12 Z" fill="#7FD3FF" stroke="#38BDF8" strokeWidth="1" />}
-                <circle cx="44" cy="22" r="1.2" fill={dark ? "#cbd5e1" : "#fff"} opacity="0.7" />
+                <path d="M22 30 C14 25, 10 17, 14 11 C20 8, 26 11, 30 16 C28 22, 26 26, 22 30 Z" fill={dark ? "#6b7280" : "#c0c6d0"} stroke={dark ? "#475569" : "#8e99ab"} strokeWidth="1.6" strokeLinejoin="round" />
+                <path d="M31 17 C36 9, 50 6, 61 10 C70 13, 75 20, 72 26 C67 33, 52 37, 40 34 C31 32, 28 24, 31 17 Z" fill={stage === "calm" ? "#9bbdc4" : stage === "alert" ? "#d8c4a2" : "#d9b1b8"} stroke={dark ? "#64748b" : "#7b879a"} strokeWidth="1.8" strokeLinejoin="round" />
+                <path d="M63 20 C69 17, 74 15, 80 14 C76 18, 76 24, 80 29 C74 28, 69 26, 63 23 Z" fill={stage === "calm" ? "#89abb2" : stage === "alert" ? "#c9b493" : "#c7a2a9"} stroke={dark ? "#64748b" : "#7b879a"} strokeWidth="1.7" strokeLinejoin="round" />
+                <path d="M35 22 C41 19, 49 18, 57 21" stroke={dark ? "#7a8798" : "#8d98a8"} strokeWidth="1.2" fill="none" strokeLinecap="round" />
+                <circle cx="41" cy="21" r={face.eyeR} fill="#1f2937" />
+                <circle cx="48" cy="21" r={face.eyeR} fill="#1f2937" />
+                <path d={face.mouth} stroke="#1f2937" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+                {face.sweat && <path d="M54 13 C57 8, 60 12, 58 16 C56 18, 53 17, 54 13 Z" fill="#9fc7d9" stroke="#85afc2" strokeWidth="0.9" />}
+                <circle cx="45" cy="23" r="0.95" fill={dark ? "#e2e8f0" : "#ffffff"} opacity="0.7" />
               </g>
             ) : (
               <g className="boom-pop" transform="translate(54 22)">
-                <circle cx="30" cy="34" r="22" fill="#374151" stroke="#111827" strokeWidth="2" />
-                <path d="M30 12 C26 4, 34 2, 35 10" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />
-                <circle cx="24" cy="30" r="3.1" fill="#f8fafc" />
-                <circle cx="36" cy="36" r="3.1" fill="#f8fafc" />
-                <path d="M24 44 Q30 48 36 44" stroke="#f8fafc" strokeWidth="2" fill="none" />
-                <path d="M86 34 L92 29 L98 34 L92 39 Z" fill="#FF8FA3" />
-                <text x="74" y="24" fontSize="18" fontWeight="700" fill={dark ? "#fde68a" : "#fb7185"} className="cozy-note">펑!</text>
+                <path d="M29 16 C39 16, 46 24, 46 34 C46 43, 39 51, 29 51 C20 51, 12 43, 12 34 C12 24, 20 16, 29 16 Z" fill="#4b5563" stroke="#1f2937" strokeWidth="1.8" />
+                <path d="M29 16 C26 8, 34 7, 35 14" stroke="#d6a96d" strokeWidth="2.7" strokeLinecap="round" />
+                <circle cx="23" cy="31" r="2.7" fill="#f1f5f9" />
+                <circle cx="35" cy="36" r="2.7" fill="#f1f5f9" />
+                <path d="M23 43 Q29 46 35 43" stroke="#f1f5f9" strokeWidth="1.8" fill="none" />
+                <path d="M76 32 C81 26, 90 27, 95 33 C90 39, 81 40, 76 32 Z" fill="#d8aeb8" />
+                <path d="M68 23 C71 20, 75 21, 77 24" stroke={dark ? "#f0c9d1" : "#bf8795"} strokeWidth="1.6" fill="none" strokeLinecap="round" />
+                <path d="M95 23 C98 20, 102 21, 104 24" stroke={dark ? "#f0c9d1" : "#bf8795"} strokeWidth="1.6" fill="none" strokeLinecap="round" />
+                <text x="70" y="22" fontSize="16" fontWeight="700" fill={dark ? "#e7c6cf" : "#ba8795"}>펑!</text>
               </g>
             )}
           </svg>
