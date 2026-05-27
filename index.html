@@ -48,10 +48,11 @@
     }
     body { background: var(--paper); color: var(--paper-ink); font-weight: 500; }
     body.dark {
-      --paper: #0b1220;
+      --paper: #05070d;
       --paper-ink: #e2e8f0;
-      --paper-line: rgba(226, 232, 240, 0.07);
-      --paper-line-strong: rgba(226, 232, 240, 0.10);
+      /* Neon-ish alley grid (green) */
+      --paper-line: rgba(34, 197, 94, 0.08);
+      --paper-line-strong: rgba(34, 197, 94, 0.14);
       --paper-shadow: rgba(0, 0, 0, 0.25);
       background: var(--paper);
       color: var(--paper-ink);
@@ -79,6 +80,13 @@
       background-image: none;
       box-shadow: 0 1px 0 var(--paper-shadow);
     }
+
+    /* Dark mode: neon signage accents */
+    body.dark .bg-brand-blue{
+      background-color: #2f6bff !important;
+      box-shadow: 0 0 0 1px rgba(47, 107, 255, 0.22), 0 0 18px rgba(47, 107, 255, 0.28);
+    }
+    body.dark .text-brand-blue{ color: #56a6ff !important; }
 
     .cozy-title{ font-family: Gaegu, Pretendard, sans-serif; letter-spacing: 0.2px; font-weight: 700; }
     .cozy-note{ font-family: Pretendard, Apple SD Gothic Neo, Malgun Gothic, sans-serif; font-weight: 600; }
@@ -164,7 +172,7 @@
       { id: "inc-etc", name: "기타", type: "income", color: "#A8B3C7" }
     ];
 
-    function getFishSpeechMessage({ ratio, pace, runaway }) {
+    function getFishSpeechMessage({ ratio, pace, runaway, dark }) {
       // Budget-driven (higher priority)
       if (ratio > 1) return "펑-! 내가 폭탄 된다고 했잖아. 이번 달 남은 날은 손가락만 빨고 살아야겠네.. 💣";
       if (ratio > 0.8) return "나 지금 목 매달리기 직전이야. 네 통장도 나만큼 숨 가쁘게 헐떡이는 중인데... 제발 멈춰!";
@@ -172,17 +180,25 @@
 
       // Trend-driven (only when calm: ≤ 50%)
       if (runaway) {
-        return "지난달 전체 지출액을 벌써 따라잡으려고 해?! 이 속도 추이면 나 진짜 조만간 폭탄으로 터져, 내 목숨이 위험하다고! 💣";
+        return dark
+          ? "야, 지난달 전체 지출액을 벌써 따라잡으려고 하네. 진짜 대단한 자제력이다, 그지? 이 속도 추이면 나 조만간 폭탄으로 터져. ...진심인데, 너 그러다 진짜 지갑 탈탈 털리고 밤새 눈물 흘린다. 💣"
+          : "지난달 전체 지출액을 벌써 따라잡으려고 해?! 이 속도 추이면 나 진짜 조만간 폭탄으로 터져, 내 목숨이 위험하다고! 💣";
       }
       if (pace === "slower") {
-        return "오... 지난달 이맘때랑 비교해보니까 지출 그래프가 훨씬 완만해. 덕분에 나도 숨통이 좀 트인다, 아주 잘하고 있어! ✨";
+        return dark
+          ? "오... 지난달 이맘때랑 비교하니까 지출 그래프가 아주 평화롭네. 웬일이냐? 덕분에 내 목줄도 느슨하고 좋네. 헤. ✨"
+          : "오... 지난달 이맘때랑 비교해보니까 지출 그래프가 훨씬 완만해. 덕분에 나도 숨통이 좀 트인다, 아주 잘하고 있어! ✨";
       }
       if (pace === "faster") {
-        return "잠깐만, 지출 추이가 이상한데? 지난달 이맘때보다 훨씬 가파르게 쓰고 있어! 너 이번 달 유독 고삐 풀린 것 같아. 제발 멈춰...!";
+        return dark
+          ? "허? 잠깐만, 지출 추이가 좀 흥미진진한데. 지난달보다 결제 속도가 눈에 띄게 빨라. 너 혹시 통장 거덜 내기 타임어택이라도 하는 중이야? 슬슬 멈추지 그래."
+          : "잠깐만, 지출 추이가 이상한데? 지난달 이맘때보다 훨씬 가파르게 쓰고 있어! 너 이번 달 유독 고삐 풀린 것 같아. 제발 멈춰...!";
       }
 
       // Default calm
-      return "아직은 줄이 넉넉해서 나도 편해. 이대로만 유지하자, 인간다운 삶 가능! ✨";
+      return dark
+        ? "잔고가 아주 클린하네. 하긴, 돈은 안 쓰면 100% 할인이지. 이 흐름 그대로 폼 좀 유지해봐, 친구. ✨"
+        : "아직은 줄이 넉넉해서 나도 편해. 이대로만 유지하자, 인간다운 삶 가능! ✨";
     }
 
     const pad = (n) => String(n).padStart(2, "0");
@@ -451,15 +467,18 @@
         const total = values.reduce((a, b) => a + b, 0);
         if (total <= 0) return;
 
+        const neonFallback = ["#2f6bff", "#ff4fd8", "#22c55e", "#a855f7", "#06b6d4", "#f97316", "#f59e0b", "#14b8a6", "#e11d48"];
+        const chartColors = (dark ? (colors || []).map((c, i) => neonFallback[i % neonFallback.length]) : colors);
+
         chartRef.current = new Chart(canvasRef.current, {
           type: "doughnut",
           data: {
             labels,
             datasets: [{
               data: values,
-              backgroundColor: colors,
+              backgroundColor: chartColors,
               borderWidth: 2,
-              borderColor: dark ? "#0f172a" : "#ffffff"
+              borderColor: dark ? "#05070d" : "#ffffff"
             }]
           },
           options: {
@@ -585,6 +604,13 @@
                 <path d="M24 14 C30 8, 44 5, 58 9 C66 12, 70 18, 68 25 C64 32, 50 36, 36 33 C28 30, 24 22, 24 14 Z" fill="#A9D8F3" stroke={dark ? "#64748b" : "#7b879a"} strokeWidth="1.7" strokeLinejoin="round" />
                 <path d="M62 18 C70 15, 78 14, 86 16 C80 21, 78 27, 84 31 C76 30, 68 27, 62 22 Z" fill="#8FC8EB" stroke={dark ? "#64748b" : "#7b879a"} strokeWidth="1.5" strokeLinejoin="round" />
                 <ellipse cx="36" cy="20" rx="2.8" ry="2.2" fill="#1f2937" />
+                {dark && (
+                  <g opacity="0.96">
+                    <path d="M26 19 C30 15, 42 15, 46 19" stroke="#111827" strokeWidth="2.2" strokeLinecap="round" />
+                    <rect x="27.2" y="16.9" width="16.6" height="7.2" rx="3.6" fill="#0b0f1a" stroke="#111827" strokeWidth="1" />
+                    <path d="M28.5 19.1 C31.5 17.2, 35.5 17.2, 38.2 19.1" stroke="rgba(255,255,255,0.18)" strokeWidth="1" strokeLinecap="round" />
+                  </g>
+                )}
                 {face.sweat && (
                   <path d="M52 10 C55 5, 58 9, 56 14 C54 16, 51 14, 52 10 Z" fill="#9fc7d9" stroke="#85afc2" strokeWidth="0.8" />
                 )}
@@ -606,7 +632,7 @@
                 <circle cx="24" cy="42" r="2.4" fill="#f1f5f9" />
                 <circle cx="36" cy="47" r="2.4" fill="#f1f5f9" />
                 <path d="M24 52 Q30 55 36 52" stroke="#f1f5f9" strokeWidth="1.6" fill="none" />
-                <text x="58" y="38" fontSize="15" fontWeight="800" fill={dark ? "#fca5a5" : "#e8799a"} fontFamily="Pretendard, sans-serif">BOOM</text>
+                <text x="58" y="38" fontSize="15" fontWeight="800" fill={dark ? "#ff4fd8" : "#e8799a"} fontFamily="Pretendard, sans-serif">BOOM</text>
               </g>
             )}
           </svg>
@@ -998,13 +1024,13 @@
               {
                 label: "지난달",
                 data: rows.map((r) => r.last),
-                backgroundColor: dark ? "rgba(148,163,184,0.7)" : "rgba(148,163,184,0.6)",
+                backgroundColor: dark ? "rgba(34,197,94,0.28)" : "rgba(148,163,184,0.6)",
                 borderRadius: 6
               },
               {
                 label: "이번달",
                 data: rows.map((r) => r.current),
-                backgroundColor: dark ? "rgba(59,130,246,0.8)" : "rgba(37,99,235,0.75)",
+                backgroundColor: dark ? "rgba(47,107,255,0.85)" : "rgba(37,99,235,0.75)",
                 borderRadius: 6
               }
             ]
@@ -1024,7 +1050,7 @@
                   callback: (v) => Number(v).toLocaleString("ko-KR")
                 },
                 grid: {
-                  color: dark ? "rgba(148,163,184,0.25)" : "rgba(148,163,184,0.2)"
+                  color: dark ? "rgba(34,197,94,0.12)" : "rgba(148,163,184,0.2)"
                 }
               }
             },
@@ -1527,7 +1553,7 @@
         const dayOfMonth = Number(String(entryDate).slice(8, 10)) || 1;
         const endBufferDay = Math.max(daysInMonth(cursorMonth) - 3, 1);
         const runaway = lastMonthExpense > 0 && monthExpense >= lastMonthExpense && dayOfMonth <= endBufferDay;
-        return { ratio, message: getFishSpeechMessage({ ratio, pace, runaway }) };
+        return { ratio, message: getFishSpeechMessage({ ratio, pace, runaway, dark }) };
       }, [
         categoriesByType.expense,
         monthData.budgets,
@@ -1535,7 +1561,8 @@
         cursorMonth,
         monthExpense,
         lastMonthExpense,
-        entryDate
+        entryDate,
+        dark
       ]);
 
       const addEntry = (ev) => {
