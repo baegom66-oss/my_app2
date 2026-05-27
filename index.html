@@ -87,6 +87,18 @@
       box-shadow: 0 0 0 1px rgba(47, 107, 255, 0.22), 0 0 18px rgba(47, 107, 255, 0.28);
     }
     body.dark .text-brand-blue{ color: #56a6ff !important; }
+    .theme-toggle{
+      border-color: #cbd5e1;
+      background: rgba(255, 255, 255, 0.88);
+      color: #0f172a;
+      font-weight: 700;
+    }
+    body.dark .theme-toggle{
+      border-color: rgba(34, 197, 94, 0.55);
+      background: linear-gradient(135deg, rgba(4, 18, 14, 0.95), rgba(10, 24, 20, 0.92));
+      color: #86efac;
+      box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.22), 0 0 14px rgba(34, 197, 94, 0.2);
+    }
 
     .cozy-title{ font-family: Gaegu, Pretendard, sans-serif; letter-spacing: 0.2px; font-weight: 700; }
     .cozy-note{ font-family: Pretendard, Apple SD Gothic Neo, Malgun Gothic, sans-serif; font-weight: 600; }
@@ -174,9 +186,21 @@
 
     function getFishSpeechMessage({ ratio, pace, runaway, dark }) {
       // Budget-driven (higher priority)
-      if (ratio > 1) return "펑-! 내가 폭탄 된다고 했잖아. 이번 달 남은 날은 손가락만 빨고 살아야겠네.. 💣";
-      if (ratio > 0.8) return "나 지금 목 매달리기 직전이야. 네 통장도 나만큼 숨 가쁘게 헐떡이는 중인데... 제발 멈춰!";
-      if (ratio > 0.5) return "어라, 줄이 왜 올라가지...?  방금 긁은 거 진짜 꼭 필요했던 거 맞아?";
+      if (ratio > 1) {
+        return dark
+          ? "오, 결국 선 넘었네. 예산 게이지 이미 폭발 직전인데 계속 밟는 거 보니까 배짱은 인정한다. 근데 이 판 계속 가면 이번 달 엔딩은 컵라면 확정이야. 💣"
+          : "펑-! 내가 폭탄 된다고 했잖아. 이번 달 남은 날은 손가락만 빨고 살아야겠네.. 💣";
+      }
+      if (ratio > 0.8) {
+        return dark
+          ? "지금 줄 거의 목까지 올라왔거든? 이건 소비가 아니라 질주야. 멋있긴 한데 통장 입장에선 재난이니까 여기서 브레이크 밟자."
+          : "나 지금 목 매달리기 직전이야. 네 통장도 나만큼 숨 가쁘게 헐떡이는 중인데... 제발 멈춰!";
+      }
+      if (ratio > 0.5) {
+        return dark
+          ? "흐름 보니까 슬슬 가속 붙었네. 아직 웃으면서 말할 때 줄여, 안 그러면 금방 위기 코스프레 끝나고 진짜 위기 온다."
+          : "어라, 줄이 왜 올라가지...?  방금 긁은 거 진짜 꼭 필요했던 거 맞아?";
+      }
 
       // Trend-driven (only when calm: ≤ 50%)
       if (runaway) {
@@ -609,6 +633,9 @@
                     <path d="M26 19 C30 15, 42 15, 46 19" stroke="#111827" strokeWidth="2.2" strokeLinecap="round" />
                     <rect x="27.2" y="16.9" width="16.6" height="7.2" rx="3.6" fill="#0b0f1a" stroke="#111827" strokeWidth="1" />
                     <path d="M28.5 19.1 C31.5 17.2, 35.5 17.2, 38.2 19.1" stroke="rgba(255,255,255,0.18)" strokeWidth="1" strokeLinecap="round" />
+                    <ellipse cx="31.1" cy="18.4" rx="2.2" ry="0.75" fill="rgba(255,255,255,0.32)" transform="rotate(-22 31.1 18.4)" />
+                    <ellipse cx="39.3" cy="19.8" rx="1.75" ry="0.55" fill="rgba(255,255,255,0.24)" transform="rotate(-22 39.3 19.8)" />
+                    <path d="M43.6 16.6 L45.5 14.5" stroke="rgba(34,197,94,0.7)" strokeWidth="1.1" strokeLinecap="round" />
                   </g>
                 )}
                 {face.sweat && (
@@ -1853,7 +1880,7 @@
             <header className="mb-4 sm:mb-6">
               <div className="flex items-center justify-between gap-2 mb-3">
                 <h1 className="text-xl sm:text-3xl font-bold cozy-title">용돈 관리 앱</h1>
-                <button onClick={() => setTheme(dark ? "light" : "dark")} className={`px-3 py-2 rounded-lg text-sm border ${card}`}>
+                <button onClick={() => setTheme(dark ? "light" : "dark")} className={`theme-toggle px-3 py-2 rounded-lg text-sm border ${card}`}>
                   {dark ? "라이트" : "다크"}
                 </button>
               </div>
