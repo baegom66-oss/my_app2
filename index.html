@@ -302,6 +302,48 @@
       };
     }
 
+    /** Walk backward from target month until a saved month is found. */
+    function getInheritedSettingsFromPreviousMonth(targetMonth) {
+      let probe = shiftMonth(targetMonth, -1);
+      for (let i = 0; i < 120; i++) {
+        if (!isMonth(probe)) return null;
+        const rawStr = localStorage.getItem(monthStorageKey(probe));
+        if (rawStr) {
+          try {
+            const normalized = normalizeMonthData(probe, JSON.parse(rawStr));
+            const categories = normalized.categories.map((c) => ({
+              id: c.id,
+              name: c.name,
+              type: c.type,
+              color: c.color
+            }));
+            const budgets = {};
+            categories.filter((c) => c.type === "expense").forEach((c) => {
+              budgets[c.id] = Math.max(0, Math.floor(Number(normalized.budgets[c.id]) || 0));
+            });
+            return { categories, budgets };
+          } catch {
+            /* try older month */
+          }
+        }
+        probe = shiftMonth(probe, -1);
+      }
+      return null;
+    }
+
+    function createMonthDataWithInheritedSettings(month) {
+      const inherited = getInheritedSettingsFromPreviousMonth(month);
+      if (!inherited) return createDefaultMonthData(month);
+      return {
+        version: 4,
+        month,
+        asset: 0,
+        categories: inherited.categories,
+        budgets: inherited.budgets,
+        entries: []
+      };
+    }
+
     function normalizeMonthData(month, raw) {
       const base = createDefaultMonthData(month);
       if (!raw || typeof raw !== "object") return base;
@@ -381,8 +423,11 @@
     function loadMonthData(month) {
       if (!isMonth(month)) return createDefaultMonthData(nowMonth());
       try {
-        const raw = localStorage.getItem(monthStorageKey(month));
-        return normalizeMonthData(month, raw ? JSON.parse(raw) : null);
+        const rawStr = localStorage.getItem(monthStorageKey(month));
+        if (rawStr) {
+          return normalizeMonthData(month, JSON.parse(rawStr));
+        }
+        return createMonthDataWithInheritedSettings(month);
       } catch {
         return createDefaultMonthData(month);
       }
