@@ -141,7 +141,46 @@
     body.dark .speech-bubble::before{ border-left-color: rgba(17, 24, 39, 0.95); }
     .mobile-shell { max-width: 480px; margin: 0 auto; }
     .tab-bar-shadow { box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.08); }
-    .safe-bottom { padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px)); }
+    .safe-bottom { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px)); }
+    .top-month-nav{
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      backdrop-filter: blur(8px);
+    }
+    .view-mode-sidebar{
+      position: fixed;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 45;
+    }
+    .desktop-with-sidebar{ padding-left: 3.25rem; }
+    @media (min-width: 640px){
+      .desktop-with-sidebar{ padding-left: 3.75rem; }
+    }
+    .budget-gauge-track{
+      height: 1.125rem;
+      border-radius: 9999px;
+      overflow: hidden;
+      box-shadow: inset 0 1px 3px rgba(15, 23, 42, 0.12);
+    }
+    body.dark .budget-gauge-track{
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
+    }
+    .budget-gauge-fill{
+      height: 100%;
+      border-radius: 9999px;
+      transition: width 0.35s ease;
+      box-shadow: 0 0 12px rgba(59, 130, 246, 0.35);
+    }
+    .budget-gauge-fill.over{
+      background: linear-gradient(90deg, #ef4444, #f97316) !important;
+      box-shadow: 0 0 14px rgba(239, 68, 68, 0.45);
+    }
+    body.dark .budget-gauge-fill:not(.over){
+      box-shadow: 0 0 14px rgba(47, 107, 255, 0.45);
+    }
     @keyframes fish-shake {
       0% { transform: translateX(0) rotate(0deg); }
       25% { transform: translateX(-1px) rotate(-2deg); }
@@ -702,15 +741,17 @@
       );
     }
 
-    function StatusBanner({ message, dark, urgencyRatio }) {
+    function StatusBanner({ message, dark, urgencyRatio, large }) {
       if (!message) return null;
       return (
-        <div className={`rounded-2xl border p-3 sm:p-4 mb-4 ${dark ? "paper-card border-slate-700" : "paper-card border-gray-200"}`}>
-          <div className="flex flex-col-reverse sm:flex-row gap-3 sm:gap-4 items-center sm:items-end justify-between">
-            <div className={`speech-bubble flex-1 w-full px-4 py-3 text-sm sm:text-[15px] pr-5 ${dark ? "text-slate-200" : "text-slate-800"}`}>
+        <div className={`rounded-2xl border ${large ? "p-4 sm:p-6" : "p-3 sm:p-4"} ${dark ? "paper-card border-slate-700" : "paper-card border-gray-200"}`}>
+          <div className={`flex flex-col-reverse sm:flex-row gap-3 sm:gap-4 items-center sm:items-end justify-between ${large ? "sm:items-center" : ""}`}>
+            <div className={`speech-bubble flex-1 w-full px-4 py-3 pr-5 ${large ? "text-base sm:text-lg py-4" : "text-sm sm:text-[15px]"} ${dark ? "text-slate-200" : "text-slate-800"}`}>
               {message}
             </div>
-            <BudgetUrgencySticker ratio={urgencyRatio || 0} dark={dark} />
+            <div className={large ? "scale-110 sm:scale-125 origin-bottom" : ""}>
+              <BudgetUrgencySticker ratio={urgencyRatio || 0} dark={dark} />
+            </div>
           </div>
         </div>
       );
@@ -776,48 +817,79 @@
       );
     }
 
-    function BudgetProgressBar({ cat, spent, count, budget, onBudgetChange, dark, inputClass, compact }) {
-      const pct = budget > 0 ? Math.min(100, Math.round((spent / budget) * 100)) : (spent > 0 ? 100 : 0);
+    function BudgetProgressBar({ cat, spent, count, budget, onBudgetChange, dark, inputClass, compact, showBudgetInput }) {
+      const pctRaw = budget > 0 ? Math.round((spent / budget) * 100) : (spent > 0 ? 100 : 0);
+      const pctDisplay = budget > 0 ? Math.min(999, pctRaw) : "-";
+      const barWidth = budget > 0 ? Math.min(100, pctRaw) : (spent > 0 ? 100 : 0);
       const over = budget > 0 && spent > budget;
+      const fillColor = over ? "" : (dark ? "#2f6bff" : "#2563eb");
       return (
-        <div className={`rounded-xl border ${compact ? "p-2" : "p-3"} ${dark ? "border-slate-700 bg-slate-800/50" : "border-slate-100 bg-slate-50/80"}`}>
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
-              {cat.name}
+        <div className={`rounded-xl border ${compact ? "p-2.5" : "p-3.5"} ${dark ? "border-slate-700 bg-slate-800/50" : "border-slate-100 bg-slate-50/80"}`}>
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="flex items-center gap-2 text-sm font-bold min-w-0">
+              <span className="w-3 h-3 rounded-full shrink-0 ring-2 ring-white/80" style={{ backgroundColor: cat.color }} />
+              <span className="truncate">{cat.name}</span>
             </div>
-            <span className={`text-xs ${dark ? "text-slate-400" : "text-slate-500"}`}>(총 {count}회)</span>
+            <span className={`text-[11px] shrink-0 ${dark ? "text-slate-400" : "text-slate-500"}`}>{count}회</span>
           </div>
-          <div className="flex items-center justify-between text-xs mb-1.5 gap-2 min-w-0">
-            <span className="min-w-0 break-all leading-tight">{formatKRW(spent)} / {budget > 0 ? formatKRW(budget) : "미설정"}</span>
-            <span className={`shrink-0 ${over ? "text-red-500 font-bold" : "text-emerald-600 font-bold"}`}>{budget > 0 ? `${pct}%` : "-"}</span>
-          </div>
-          <div className={`h-1.5 rounded-full overflow-hidden ${dark ? "bg-slate-700" : "bg-slate-200"}`}>
+          <div className={`budget-gauge-track mb-2 ${dark ? "bg-slate-900/80" : "bg-slate-200"}`}>
             <div
-              className={`h-full rounded-full transition-all ${over ? "bg-red-500" : "bg-brand-blue"}`}
-              style={{ width: `${budget > 0 ? Math.min(100, pct) : (spent > 0 ? 100 : 0)}%` }}
+              className={`budget-gauge-fill ${over ? "over" : ""}`}
+              style={{ width: `${barWidth}%`, backgroundColor: over ? undefined : fillColor }}
             />
           </div>
-          {!compact && (
-            <input
-              type="number"
-              placeholder="예산 상한 입력"
-              value={budget || ""}
-              onChange={(e) => onBudgetChange(cat.id, e.target.value)}
-              className={`w-full mt-2 rounded-lg border px-2 py-1.5 text-sm ${inputClass}`}
-            />
+          <div className="flex items-center justify-between gap-2 min-w-0">
+            <span className={`text-xs font-medium min-w-0 break-all leading-tight ${dark ? "text-slate-300" : "text-slate-700"}`}>
+              {formatKRW(spent)} / {budget > 0 ? formatKRW(budget) : "미설정"}
+            </span>
+            <span className={`shrink-0 text-sm font-extrabold tabular-nums ${over ? "text-red-500" : dark ? "text-sky-300" : "text-blue-700"}`}>
+              {budget > 0 ? `${pctDisplay}%` : "-"}
+            </span>
+          </div>
+          {showBudgetInput && (
+            <div className="flex items-center gap-1.5 mt-2">
+              <label className={`text-[10px] shrink-0 ${dark ? "text-slate-500" : "text-slate-400"}`}>예산</label>
+              <input
+                type="number"
+                placeholder="0"
+                value={budget || ""}
+                onChange={(e) => onBudgetChange(cat.id, e.target.value)}
+                className={`flex-1 min-w-0 rounded-md border px-1.5 py-0.5 text-xs h-7 ${inputClass}`}
+              />
+            </div>
           )}
         </div>
       );
     }
 
-    function MonthNav({ cursorMonth, onPrev, onNext, dark, cardClass }) {
+    function TopMonthNav({ cursorMonth, onPrev, onNext, dark, cardClass }) {
+      const [y, m] = cursorMonth.split("-");
       return (
-        <div className={`rounded-xl border p-3 flex items-center justify-between ${cardClass}`}>
-          <button onClick={onPrev} className="px-3 py-1.5 rounded-lg bg-brand-blue text-white text-sm font-semibold">이전 달</button>
-          <strong className="text-base">{monthToLabel(cursorMonth)}</strong>
-          <button onClick={onNext} className="px-3 py-1.5 rounded-lg bg-brand-blue text-white text-sm font-semibold">다음 달</button>
+        <div className={`top-month-nav rounded-xl border px-3 py-2.5 flex items-center justify-between gap-2 mb-4 ${cardClass}`}>
+          <button type="button" onClick={onPrev} className="px-2.5 py-1.5 rounded-lg bg-brand-blue text-white text-xs sm:text-sm font-semibold shrink-0">◀</button>
+          <div className="text-center min-w-0">
+            <p className={`text-[10px] sm:text-xs ${dark ? "text-slate-400" : "text-slate-500"}`}>{y}년</p>
+            <strong className="text-lg sm:text-xl font-bold tabular-nums">{Number(m)}월</strong>
+          </div>
+          <button type="button" onClick={onNext} className="px-2.5 py-1.5 rounded-lg bg-brand-blue text-white text-xs sm:text-sm font-semibold shrink-0">▶</button>
         </div>
+      );
+    }
+
+    function ViewModeSidebar({ isMobileView, onSwitchToMobile, dark, cardClass }) {
+      return (
+        <aside className="view-mode-sidebar">
+          <button
+            type="button"
+            onClick={onSwitchToMobile}
+            title="모바일 보기"
+            className={`flex flex-col items-center gap-1 px-2 py-3 rounded-xl border text-[10px] font-bold leading-tight shadow-lg transition-transform hover:scale-105 ${cardClass}`}
+            style={{ writingMode: "vertical-rl" }}
+          >
+            <span className="text-base">📱</span>
+            <span>모바일</span>
+          </button>
+        </aside>
       );
     }
 
@@ -864,7 +936,34 @@
       );
     }
 
-    function CategoryManager({ monthData, dark, inputClass, onAdd, onDelete, onColorChange, newCategoryName, setNewCategoryName, newCategoryType, setNewCategoryType, newCategoryColor, setNewCategoryColor, compact }) {
+    function CategoryEditModal({ open, draft, dark, inputClass, onChange, onClose, onSave }) {
+      if (!open || !draft) return null;
+      return (
+        <div className="fixed inset-0 z-[75] bg-black/45 p-4 flex items-end sm:items-center justify-center" onClick={onClose}>
+          <div className={`w-full max-w-sm rounded-2xl border p-4 ${dark ? "bg-slate-900 border-slate-700 text-slate-100" : "bg-white border-gray-200 text-slate-900"}`} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-base font-bold">카테고리 수정</h3>
+              <button type="button" onClick={onClose} className={`px-2.5 py-1 text-xs rounded-lg ${dark ? "bg-slate-800" : "bg-slate-100"}`}>닫기</button>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs block">이름</label>
+              <input type="text" value={draft.name} onChange={(e) => onChange({ name: e.target.value })} className={`w-full rounded-xl border px-3 py-2 text-sm ${inputClass}`} />
+              {draft.type === "expense" && (
+                <>
+                  <label className="text-xs block">목표 예산 (원)</label>
+                  <input type="text" inputMode="numeric" value={draft.budget} onChange={(e) => onChange({ budget: e.target.value.replace(/[^\d]/g, "") })} className={`w-full rounded-xl border px-3 py-2 text-sm ${inputClass}`} />
+                </>
+              )}
+              <label className="text-xs block">색상</label>
+              <input type="color" value={draft.color} onChange={(e) => onChange({ color: e.target.value })} className="h-10 w-full rounded-xl border px-1" />
+            </div>
+            <button type="button" onClick={onSave} className="w-full mt-4 py-2.5 rounded-xl bg-brand-blue text-white font-semibold text-sm">저장</button>
+          </div>
+        </div>
+      );
+    }
+
+    function CategoryManager({ monthData, monthDataBudgets, dark, inputClass, onAdd, onDelete, onColorChange, onEdit, newCategoryName, setNewCategoryName, newCategoryType, setNewCategoryType, newCategoryColor, setNewCategoryColor, compact }) {
       return (
         <div className={compact ? "" : `rounded-2xl border p-4 ${dark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-100"}`}>
           {!compact && <h3 className="font-semibold mb-3">카테고리 커스텀</h3>}
@@ -883,19 +982,28 @@
               placeholder="카테고리 이름 입력"
               className={`flex-1 rounded-xl border px-3 py-2 text-sm ${inputClass}`}
             />
-            <button type="button" onClick={onAdd} className="px-4 rounded-xl bg-brand-blue text-white font-semibold text-sm">추가</button>
+            <button type="button" onClick={onAdd} className="px-3 rounded-xl bg-brand-blue text-white font-semibold text-sm shrink-0">추가</button>
           </div>
-          <div className={`space-y-2 overflow-y-auto ${compact ? "max-h-40" : "max-h-48"}`}>
-            {monthData.categories.map((cat) => (
-              <div key={cat.id} className={`rounded-xl border p-2 flex items-center gap-2 ${dark ? "border-slate-700" : "border-slate-200"}`}>
-                <input type="color" value={cat.color} onChange={(e) => onColorChange(cat.id, e.target.value)} className="h-8 w-10 rounded border shrink-0" />
-                <span className={`text-xs px-2 py-0.5 rounded shrink-0 ${cat.type === "expense" ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}>
-                  {cat.type === "expense" ? "지출" : "수입"}
-                </span>
-                <span className="text-sm font-medium flex-1 truncate">{cat.name}</span>
-                <button type="button" onClick={() => onDelete(cat.id)} className="px-2 py-1 rounded-lg bg-red-500 text-white text-xs shrink-0">삭제</button>
-              </div>
-            ))}
+          <div className={`space-y-2 overflow-y-auto ${compact ? "max-h-48" : "max-h-56"}`}>
+            {monthData.categories.map((cat) => {
+              const budget = monthDataBudgets?.[cat.id] || 0;
+              return (
+                <div key={cat.id} className={`rounded-xl border p-2 flex items-center gap-1.5 ${dark ? "border-slate-700" : "border-slate-200"}`}>
+                  <input type="color" value={cat.color} onChange={(e) => onColorChange(cat.id, e.target.value)} className="h-7 w-9 rounded border shrink-0" />
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${cat.type === "expense" ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}>
+                    {cat.type === "expense" ? "지출" : "수입"}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{cat.name}</p>
+                    {cat.type === "expense" && budget > 0 && (
+                      <p className={`text-[10px] truncate ${dark ? "text-slate-500" : "text-slate-400"}`}>예산 {formatKRW(budget)}</p>
+                    )}
+                  </div>
+                  <button type="button" onClick={() => onEdit(cat)} className={`px-1.5 py-1 rounded-md text-[10px] font-semibold shrink-0 ${dark ? "bg-slate-700 text-slate-200" : "bg-slate-100 text-slate-700"}`}>수정</button>
+                  <button type="button" onClick={() => onDelete(cat.id)} className="px-1.5 py-1 rounded-md bg-red-500 text-white text-[10px] shrink-0">삭제</button>
+                </div>
+              );
+            })}
           </div>
         </div>
       );
@@ -1132,8 +1240,11 @@
     function AssetBudgetSection({
       monthData, setMonthData, monthIncome, monthExpense, categoriesByType, currentStats,
       monthDataBudgets, updateBudget, dark, cardClass, inputClass, subtle,
-      budgetCollapsible, budgetOpen, onBudgetToggle, budgetSummary, budgetCompact
+      budgetCollapsible, budgetOpen, onBudgetToggle, budgetSummary, budgetCompact,
+      overviewHero, showBudgetInput
     }) {
+      const remaining = monthData.asset + monthIncome - monthExpense;
+      const totalBudget = categoriesByType.expense.reduce((s, c) => s + (monthDataBudgets[c.id] || 0), 0);
       const budgetList = (
         <div className={`space-y-3 ${budgetCompact ? "grid sm:grid-cols-2 gap-2 space-y-0" : ""}`}>
           {categoriesByType.expense.map((cat) => (
@@ -1147,6 +1258,7 @@
               dark={dark}
               inputClass={inputClass}
               compact={budgetCompact && !budgetOpen}
+              showBudgetInput={showBudgetInput !== false && (!budgetCompact || budgetOpen)}
             />
           ))}
         </div>
@@ -1155,6 +1267,22 @@
       return (
         <div className={cardClass ? `rounded-2xl border p-4 sm:p-5 ${cardClass}` : ""}>
           <h2 className="font-semibold text-lg mb-3">자산 및 예산 현황</h2>
+          {overviewHero && (
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className={`rounded-2xl p-4 border-2 ${dark ? "border-sky-500/40 bg-slate-900/80" : "border-blue-200 bg-blue-50/90"}`}>
+                <p className={`text-xs font-semibold mb-1 ${subtle}`}>이번 달 잔여</p>
+                <p className={`text-xl sm:text-2xl font-extrabold tabular-nums break-all ${remaining >= 0 ? (dark ? "text-sky-300" : "text-blue-700") : "text-red-500"}`}>
+                  {formatKRW(remaining)}
+                </p>
+              </div>
+              <div className={`rounded-2xl p-4 border-2 ${dark ? "border-emerald-500/30 bg-slate-900/80" : "border-emerald-200 bg-emerald-50/80"}`}>
+                <p className={`text-xs font-semibold mb-1 ${subtle}`}>예산 총액</p>
+                <p className={`text-xl sm:text-2xl font-extrabold tabular-nums break-all ${dark ? "text-emerald-300" : "text-emerald-700"}`}>
+                  {totalBudget > 0 ? formatKRW(totalBudget) : "미설정"}
+                </p>
+              </div>
+            </div>
+          )}
           <div className="flex flex-col sm:flex-row sm:items-end gap-3 mb-4 min-w-0">
             <div className="flex-1 min-w-0">
               <label className={`text-sm block mb-1 ${subtle}`}>현재 보유 자산</label>
@@ -1230,8 +1358,6 @@
 
       return (
         <div className="space-y-6">
-          <MonthNav cursorMonth={cursorMonth} onPrev={goPrevMonth} onNext={goNextMonth} dark={dark} cardClass={card} />
-
           <DesktopSection title="개요" subtle={subtle}>
             <div className={`rounded-2xl border p-4 ${card}`}>
               <AssetBudgetSection
@@ -1315,6 +1441,7 @@
                       dark={dark}
                       inputClass={input}
                       compact={false}
+                      showBudgetInput={true}
                     />
                   ))}
                 </div>
@@ -1379,56 +1506,30 @@
       );
     }
 
-    function TabBar({ activeTab, onTabChange, dark, cardClass, variant }) {
-      const tabs = variant === "mobile"
-        ? [
-            { id: "home", label: "홈", icon: "🏠" },
-            { id: "analysis", label: "분석", icon: "📊" }
-          ]
-        : [
-            { id: "home", label: "홈", icon: "🏠" },
-            { id: "input", label: "입력", icon: "✏️" },
-            { id: "analysis", label: "분석", icon: "📊" }
-          ];
-
-      if (variant === "desktop") {
-        return (
-          <nav className={`rounded-2xl border p-2 flex gap-2 mb-5 ${cardClass}`}>
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => onTabChange(tab.id)}
-                className={`flex-1 py-3 px-4 rounded-xl text-base font-semibold transition-colors flex items-center justify-center gap-2 ${
-                  activeTab === tab.id
-                    ? "bg-brand-blue text-white"
-                    : dark ? "text-slate-300 hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100"
-                }`}
-              >
-                <span>{tab.icon}</span>
-                <span>{tab.label}</span>
-              </button>
-            ))}
-          </nav>
-        );
-      }
+    function TabBar({ activeTab, onTabChange, onSwitchToDesktop, dark }) {
+      const tabs = [
+        { id: "status", label: "현황", icon: "📋" },
+        { id: "home", label: "입력", icon: "🏠" },
+        { id: "analysis", label: "분석", icon: "📊" },
+        { id: "view-pc", label: "PC", icon: "💻", action: onSwitchToDesktop }
+      ];
 
       return (
-        <nav className={`fixed bottom-0 left-0 right-0 z-50 tab-bar-shadow border-t ${dark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"}`}>
-          <div className="mobile-shell grid grid-cols-3">
+        <nav className={`fixed bottom-0 left-0 right-0 z-50 tab-bar-shadow border-t ${dark ? "bg-slate-900/95 border-slate-800" : "bg-white/95 border-slate-200"}`}>
+          <div className="mobile-shell grid grid-cols-4">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => onTabChange(tab.id)}
-                className={`py-3 flex flex-col items-center gap-0.5 text-xs font-semibold transition-colors ${
-                  activeTab === tab.id
+                onClick={() => (tab.action ? tab.action() : onTabChange(tab.id))}
+                className={`py-2.5 flex flex-col items-center gap-0.5 text-[10px] font-semibold transition-colors ${
+                  activeTab === tab.id && tab.id !== "view-pc"
                     ? "text-brand-blue"
                     : dark ? "text-slate-400" : "text-slate-500"
                 }`}
               >
-                <span className="text-lg">{tab.icon}</span>
-                <span>{tab.label}</span>
+                <span className="text-base leading-none">{tab.icon}</span>
+                <span className="leading-tight">{tab.label}</span>
               </button>
             ))}
           </div>
@@ -1441,7 +1542,8 @@
       migrateLegacyIfNeeded();
       const currentMonth = nowMonth();
       const [viewMode, setViewMode] = useState("mobile");
-      const [activeTab, setActiveTab] = useState("home");
+      const [activeTab, setActiveTab] = useState("status");
+      const [categoryEditDraft, setCategoryEditDraft] = useState(null);
       const [cursorMonth, setCursorMonth] = useState(currentMonth);
       const [monthData, setMonthData] = useState(() => loadMonthData(currentMonth));
       const [lastMonthData, setLastMonthData] = useState(() => loadMonthData(shiftMonth(currentMonth, -1)));
@@ -1466,6 +1568,7 @@
 
       useEffect(() => {
         if (isMobileView && activeTab === "input") setActiveTab("home");
+        if (!isMobileView && activeTab === "view-pc") setActiveTab("status");
       }, [isMobileView, activeTab]);
 
       useEffect(() => {
@@ -1704,6 +1807,42 @@
         setMonthData((prev) => ({ ...prev, budgets: { ...prev.budgets, [catId]: n } }));
       };
 
+      const openCategoryEdit = (cat) => {
+        if (!cat) return;
+        setCategoryEditDraft({
+          id: cat.id,
+          type: cat.type,
+          name: cat.name,
+          color: cat.color,
+          budget: String(monthData.budgets[cat.id] || "")
+        });
+      };
+
+      const updateCategoryEditDraft = (patch) => {
+        setCategoryEditDraft((prev) => (prev ? { ...prev, ...patch } : prev));
+      };
+
+      const saveCategoryEdit = () => {
+        if (!categoryEditDraft) return;
+        const cleanName = categoryEditDraft.name.trim();
+        if (!cleanName) return;
+        const duplicated = monthData.categories.some(
+          (c) => c.id !== categoryEditDraft.id && c.type === categoryEditDraft.type && c.name === cleanName
+        );
+        if (duplicated) return;
+        const budgetN = Math.max(0, Math.floor(Number(categoryEditDraft.budget) || 0));
+        setMonthData((prev) => ({
+          ...prev,
+          categories: prev.categories.map((c) =>
+            c.id === categoryEditDraft.id ? { ...c, name: cleanName, color: categoryEditDraft.color } : c
+          ),
+          budgets: categoryEditDraft.type === "expense"
+            ? { ...prev.budgets, [categoryEditDraft.id]: budgetN }
+            : prev.budgets
+        }));
+        setCategoryEditDraft(null);
+      };
+
       const goPrevMonth = () => setCursorMonth(shiftMonth(cursorMonth, -1));
       const goNextMonth = () => setCursorMonth(shiftMonth(cursorMonth, 1));
 
@@ -1720,11 +1859,13 @@
       const categoryManagerInner = (
         <CategoryManager
           monthData={monthData}
+          monthDataBudgets={monthData.budgets}
           dark={dark}
           inputClass={input}
           onAdd={addCategory}
           onDelete={deleteCategory}
           onColorChange={updateCategoryColor}
+          onEdit={openCategoryEdit}
           newCategoryName={newCategoryName}
           setNewCategoryName={setNewCategoryName}
           newCategoryType={newCategoryType}
@@ -1781,46 +1922,49 @@
         />
       );
 
-      const calendarBlock = (
-        <div className={`rounded-2xl border p-4 sm:p-6 ${card}`}>
-          <h2 className="font-semibold text-lg mb-4">달력</h2>
+      const miniCalendarBlock = (
+        <div className={`rounded-2xl border p-3 ${card}`}>
+          <h2 className="font-semibold text-sm mb-2">미니 달력</h2>
           <CalendarGrid
             month={cursorMonth}
             entriesByDate={entriesByDate}
             categoryMap={categoryMap}
             onDateClick={setOpenDate}
             dark={dark}
-            wide={!isMobileView}
+            compact={true}
           />
         </div>
       );
 
-      const mobileAssetBudgetBlock = (
-        <AssetBudgetSection
-          monthData={monthData}
-          setMonthData={setMonthData}
-          monthIncome={monthIncome}
-          monthExpense={monthExpense}
-          categoriesByType={categoriesByType}
-          currentStats={currentStats}
-          monthDataBudgets={monthData.budgets}
-          updateBudget={updateBudget}
-          dark={dark}
-          cardClass={card}
-          inputClass={input}
-          subtle={subtle}
-          budgetCollapsible={true}
-          budgetOpen={budgetOpen}
-          onBudgetToggle={() => setBudgetOpen((v) => !v)}
-          budgetSummary={budgetSummary}
-          budgetCompact={false}
-        />
+      const mobileStatusContent = (
+        <div className="space-y-4">
+          <StatusBanner message={urgencyInfo.message} dark={dark} urgencyRatio={urgencyInfo.ratio} large />
+          <AssetBudgetSection
+            monthData={monthData}
+            setMonthData={setMonthData}
+            monthIncome={monthIncome}
+            monthExpense={monthExpense}
+            categoriesByType={categoriesByType}
+            currentStats={currentStats}
+            monthDataBudgets={monthData.budgets}
+            updateBudget={updateBudget}
+            dark={dark}
+            cardClass={card}
+            inputClass={input}
+            subtle={subtle}
+            budgetCollapsible={true}
+            budgetOpen={budgetOpen}
+            onBudgetToggle={() => setBudgetOpen((v) => !v)}
+            budgetSummary={budgetSummary}
+            budgetCompact={!budgetOpen}
+            overviewHero={true}
+            showBudgetInput={budgetOpen}
+          />
+        </div>
       );
 
       const mobileHomeContent = (
         <div className="space-y-4">
-          <MonthNav cursorMonth={cursorMonth} onPrev={goPrevMonth} onNext={goNextMonth} dark={dark} cardClass={card} />
-          {mobileAssetBudgetBlock}
           {entryFormBlock}
           <CollapsiblePanel
             title="카테고리 커스텀"
@@ -1832,78 +1976,52 @@
           >
             {categoryManagerInner}
           </CollapsiblePanel>
-          {calendarBlock}
+          {miniCalendarBlock}
           <DetailList
             entries={monthData.entries}
             categoryMap={categoryMap}
             dark={dark}
             cardClass={card}
-            onEditEntry={openEntryEdit}
-            onDeleteEntry={deleteEntry}
-          />
-          <DonutSection donutLabels={donutLabels} donutValues={donutValues} donutColors={donutColors} dark={dark} cardClass={card} />
-        </div>
-      );
-
-      const inputContent = (
-        <div className="space-y-5">
-          <MonthNav cursorMonth={cursorMonth} onPrev={goPrevMonth} onNext={goNextMonth} dark={dark} cardClass={card} />
-          {entryFormBlock}
-        </div>
-      );
-
-      const analysisContent = (
-        <div className="space-y-5">
-          <MonthNav cursorMonth={cursorMonth} onPrev={goPrevMonth} onNext={goNextMonth} dark={dark} cardClass={card} />
-          <AnalysisPanel
-            trendRows={trendRows}
-            entries={monthData.entries}
-            categoryMap={categoryMap}
-            donutLabels={donutLabels}
-            donutValues={donutValues}
-            donutColors={donutColors}
-            dark={dark}
-            cardClass={card}
+            maxHeight="max-h-[28rem]"
             onEditEntry={openEntryEdit}
             onDeleteEntry={deleteEntry}
           />
         </div>
+      );
+
+      const mobileAnalysisContent = (
+        <DonutSection donutLabels={donutLabels} donutValues={donutValues} donutColors={donutColors} dark={dark} cardClass={card} />
       );
 
       const activeTabContent = isMobileView
-        ? (activeTab === "analysis" ? analysisContent : mobileHomeContent)
+        ? (activeTab === "status" ? mobileStatusContent : activeTab === "analysis" ? mobileAnalysisContent : mobileHomeContent)
         : null;
 
       return (
         <div className={`${dark ? "bg-slate-950 text-slate-100" : "text-slate-900"} paper-bg min-h-screen ${contentPad}`}>
-          <div className={`${shellClass} px-4 sm:px-6 py-4 sm:py-6`}>
-            <header className="mb-4 sm:mb-6">
-              <div className="flex items-center justify-between gap-2 mb-3">
-                <h1 className="text-xl sm:text-3xl font-bold cozy-title">용돈 관리 앱</h1>
-                <button onClick={() => setTheme(dark ? "light" : "dark")} className={`theme-toggle px-3 py-2 rounded-lg text-sm border ${card}`}>
+          {!isMobileView && (
+            <ViewModeSidebar
+              isMobileView={isMobileView}
+              onSwitchToMobile={() => setViewMode("mobile")}
+              dark={dark}
+              cardClass={card}
+            />
+          )}
+          <div className={`${shellClass} px-4 sm:px-6 py-4 sm:py-6 ${!isMobileView ? "desktop-with-sidebar" : ""}`}>
+            <header className="mb-3 sm:mb-4">
+              <div className="flex items-center justify-between gap-2">
+                <h1 className="text-xl sm:text-2xl font-bold cozy-title">용돈 관리 앱</h1>
+                <button type="button" onClick={() => setTheme(dark ? "light" : "dark")} className={`theme-toggle px-3 py-2 rounded-lg text-sm border shrink-0 ${card}`}>
                   {dark ? "라이트" : "다크"}
-                </button>
-              </div>
-
-              <div className={`rounded-xl border p-1 flex gap-1 ${card}`}>
-                <button
-                  type="button"
-                  onClick={() => setViewMode("mobile")}
-                  className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${viewMode === "mobile" ? "bg-brand-blue text-white" : dark ? "text-slate-400" : "text-slate-600"}`}
-                >
-                  📱 모바일 보기
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode("desktop")}
-                  className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${viewMode === "desktop" ? "bg-brand-blue text-white" : dark ? "text-slate-400" : "text-slate-600"}`}
-                >
-                  💻 PC 보기
                 </button>
               </div>
             </header>
 
-            <StatusBanner message={urgencyInfo.message} dark={dark} urgencyRatio={urgencyInfo.ratio} />
+            <TopMonthNav cursorMonth={cursorMonth} onPrev={goPrevMonth} onNext={goNextMonth} dark={dark} cardClass={card} />
+
+            {!isMobileView && (
+              <StatusBanner message={urgencyInfo.message} dark={dark} urgencyRatio={urgencyInfo.ratio} />
+            )}
 
             {isMobileView ? activeTabContent : (
               <DesktopDashboard
@@ -1945,7 +2063,12 @@
           </div>
 
           {isMobileView && (
-            <TabBar activeTab={activeTab} onTabChange={setActiveTab} dark={dark} cardClass={card} variant="mobile" />
+            <TabBar
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+              onSwitchToDesktop={() => setViewMode("desktop")}
+              dark={dark}
+            />
           )}
 
           <DateDetailModal
@@ -1967,6 +2090,16 @@
             onChange={updateEntryDraft}
             onClose={() => setEntryEditDraft(null)}
             onSave={saveEntryEdit}
+          />
+
+          <CategoryEditModal
+            open={!!categoryEditDraft}
+            draft={categoryEditDraft}
+            dark={dark}
+            inputClass={input}
+            onChange={updateCategoryEditDraft}
+            onClose={() => setCategoryEditDraft(null)}
+            onSave={saveCategoryEdit}
           />
         </div>
       );
