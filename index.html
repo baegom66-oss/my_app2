@@ -222,6 +222,18 @@
       { id: "inc-bonus", name: "보너스", type: "income", color: "#B5ABC9" },
       { id: "inc-etc", name: "기타", type: "income", color: "#A8B3C7" }
     ];
+    const DEFAULT_CATEGORY_IDS = new Set([
+      ...DEFAULT_EXPENSE_CATEGORIES.map((c) => c.id),
+      ...DEFAULT_INCOME_CATEGORIES.map((c) => c.id)
+    ]);
+
+    function hasCustomCategories(categories) {
+      return (categories || []).some((c) => !DEFAULT_CATEGORY_IDS.has(c.id));
+    }
+
+    function categoryIdsSignature(categories) {
+      return (categories || []).map((c) => c.id).sort().join("|");
+    }
 
     function getFishSpeechMessage({ ratio, pace, runaway, dark }) {
       // Budget-driven (higher priority)
@@ -344,6 +356,27 @@
       };
     }
 
+    /** 이전 달 커스텀을 아직 반영하지 않은 달(기본 카테고리만·내역 없음)인지 판별 */
+    function shouldInheritSettingsFromPreviousMonth(month, data) {
+      if (!data || data.entries?.length > 0) return false;
+      if (hasCustomCategories(data.categories)) return false;
+      const inherited = getInheritedSettingsFromPreviousMonth(month);
+      if (!inherited) return false;
+      if (hasCustomCategories(inherited.categories)) return true;
+      return categoryIdsSignature(inherited.categories) !== categoryIdsSignature(data.categories);
+    }
+
+    function applyInheritedSettings(month, data) {
+      const inherited = getInheritedSettingsFromPreviousMonth(month);
+      if (!inherited) return data;
+      return {
+        ...data,
+        month,
+        categories: inherited.categories,
+        budgets: { ...inherited.budgets }
+      };
+    }
+
     function normalizeMonthData(month, raw) {
       const base = createDefaultMonthData(month);
       if (!raw || typeof raw !== "object") return base;
@@ -424,10 +457,14 @@
       if (!isMonth(month)) return createDefaultMonthData(nowMonth());
       try {
         const rawStr = localStorage.getItem(monthStorageKey(month));
-        if (rawStr) {
-          return normalizeMonthData(month, JSON.parse(rawStr));
+        if (!rawStr) {
+          return createMonthDataWithInheritedSettings(month);
         }
-        return createMonthDataWithInheritedSettings(month);
+        const data = normalizeMonthData(month, JSON.parse(rawStr));
+        if (shouldInheritSettingsFromPreviousMonth(month, data)) {
+          return applyInheritedSettings(month, data);
+        }
+        return data;
       } catch {
         return createDefaultMonthData(month);
       }
